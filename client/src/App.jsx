@@ -93,13 +93,17 @@ function App() {
           </p>
           <audio
             ref={audioRef}
-            src={`http://localhost:3000${round[currentIndex].file}`}
+            src={round[currentIndex].file}   // 👈 USES full Firebase URL directly
             preload="auto"
             autoPlay
             controls
             onPlay={handlePlay}
             onEnded={handleEnded}
+            onError={(e) => {
+              console.error("Audio error:", e, "URL:", round[currentIndex].file);
+            }}
           />
+
         </div>
       )}
 
