@@ -8,8 +8,11 @@ function App() {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const audioRef = useRef(null);
+  const playTimeoutRef = useRef(null);
 
   const BREAK_DURATION_MS = 5000; // 5 seconds
+  const PLAY_DURATION_MS = 90000; // default 90 seconds; plan to make configurable later
+  const PLAY_DURATION_SECONDS = PLAY_DURATION_MS / 1000;
 
   // Fetch a new round
   const generateRound = async () => {
@@ -29,6 +32,7 @@ function App() {
 
   const startBreakThenNext = () => {
     if (advancingRef.current) return;
+    clearPlayTimeout();
     advancingRef.current = true;
 
     if (currentIndex !== null && currentIndex < round.length - 1) {
@@ -60,6 +64,7 @@ function App() {
   };
 
   const handleEnded = () => {
+    clearPlayTimeout();
     startBreakThenNext();
   };
 
@@ -67,10 +72,12 @@ function App() {
     if (audioRef.current) audioRef.current.volume = 1.0;
     setBreakTimeLeft(null);
     setIsPlaying(true);
+    schedulePlayTimeout();
   };
 
   const handlePause = () => {
     setIsPlaying(false);
+    clearPlayTimeout();
   };
 
   const handleTimeUpdate = (event) => {
@@ -99,6 +106,7 @@ function App() {
     }
 
     setIsPlaying(false);
+    clearPlayTimeout();
 
     startBreakThenNext();
   };
@@ -115,12 +123,40 @@ function App() {
     }
   };
 
+  const clearPlayTimeout = () => {
+    if (playTimeoutRef.current) {
+      clearTimeout(playTimeoutRef.current);
+      playTimeoutRef.current = null;
+    }
+  };
+
+  const schedulePlayTimeout = () => {
+    clearPlayTimeout();
+
+    playTimeoutRef.current = setTimeout(() => {
+      if (!audioRef.current) return;
+
+      audioRef.current.pause();
+      setIsPlaying(false);
+      playTimeoutRef.current = null;
+      startBreakThenNext();
+    }, PLAY_DURATION_MS);
+  };
+
   useEffect(() => {
     // Reset playback indicators whenever we load a new track
     setCurrentTime(0);
     setDuration(0);
     setIsPlaying(false);
+    clearPlayTimeout();
   }, [currentIndex, round]);
+
+  useEffect(() => () => clearPlayTimeout(), []);
+
+  const effectiveDuration = duration
+    ? Math.min(duration, PLAY_DURATION_SECONDS)
+    : PLAY_DURATION_SECONDS;
+  const effectiveCurrentTime = Math.min(currentTime, effectiveDuration);
 
   return (
     <div>
@@ -161,11 +197,11 @@ function App() {
           </button>
           <div>
             <progress
-              value={duration ? currentTime : 0}
-              max={duration || 1}
+              value={effectiveCurrentTime}
+              max={effectiveDuration}
             />
             <span>
-              {formatTime(currentTime)} / {formatTime(duration)}
+              {formatTime(effectiveCurrentTime)} / {formatTime(effectiveDuration)}
             </span>
           </div>
           <audio
