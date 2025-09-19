@@ -36,6 +36,29 @@ async function getRandomFile(folderPath) {
   return url;
 }
 
+const STYLE_CONFIG = {
+  ballroom: {
+    baseFolder: "Ballroom",
+    dances: [
+      { folder: "Waltz", label: "Waltz" },
+      { folder: "Tango", label: "Tango" },
+      { folder: "VienneseWaltz", label: "Viennese Waltz" },
+      { folder: "Foxtrot", label: "Foxtrot" },
+      { folder: "Quickstep", label: "Quickstep" },
+    ],
+  },
+  latin: {
+    baseFolder: "Latin",
+    dances: [
+      { folder: "ChaCha", label: "Cha Cha" },
+      { folder: "Samba", label: "Samba" },
+      { folder: "Rumba", label: "Rumba" },
+      { folder: "Paso", label: "Paso Doble" },
+      { folder: "Jive", label: "Jive" },
+    ],
+  },
+};
+
 // --- ROUTES ---
 
 // Test route for root
@@ -48,15 +71,22 @@ app.get("/api/hello", (req, res) => {
   res.json({ message: "Hello from the backend 👋" });
 });
 
-// Generate a Standard round (Waltz, Tango, Viennese Waltz, Foxtrot, Quickstep)
 app.get("/api/round", async (req, res) => {
   try {
-    const dances = ["Waltz", "Tango", "VienneseWaltz", "Foxtrot", "Quickstep"];
+    const requestedStyle = (req.query.style || "ballroom").toLowerCase();
+    const config = STYLE_CONFIG[requestedStyle];
+
+    if (!config) {
+      res
+        .status(400)
+        .json({ error: `Unsupported style '${req.query.style ?? ""}'` });
+      return;
+    }
 
     const round = await Promise.all(
-      dances.map(async (dance) => {
-        const url = await getRandomFile(`Ballroom/${dance}`);
-        return { dance, file: url };
+      config.dances.map(async ({ folder, label }) => {
+        const url = await getRandomFile(`${config.baseFolder}/${folder}`);
+        return { dance: label, file: url };
       })
     );
 

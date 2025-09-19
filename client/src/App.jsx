@@ -4,6 +4,15 @@ const BREAK_MIN_SECONDS = 5;
 const BREAK_MAX_SECONDS = 30;
 const DEFAULT_BREAK_SECONDS = BREAK_MIN_SECONDS;
 
+const STYLE_OPTIONS = [
+  { id: "ballroom", label: "Ballroom" },
+  { id: "latin", label: "Latin" },
+  { id: "rhythm", label: "Rhythm" },
+  { id: "smooth", label: "Smooth" },
+];
+
+const ENABLED_STYLE_IDS = new Set(["latin", "ballroom"]);
+
 const SONG_MIN_SECONDS = 60;
 const SONG_MAX_SECONDS = 180;
 const SONG_STEP_SECONDS = 5;
@@ -14,6 +23,7 @@ function App() {
   const [currentIndex, setCurrentIndex] = useState(null);
   const [breakTimeLeft, setBreakTimeLeft] = useState(null);
   const [isRoundActive, setIsRoundActive] = useState(false);
+  const [selectedStyle, setSelectedStyle] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -120,10 +130,20 @@ function App() {
     }, 1000);
   };
 
-  // Fetch a new round
-  const generateRound = async () => {
+  // Fetch a new round for the selected style
+  const generateRound = async (style = selectedStyle) => {
+    if (!style) {
+      console.warn("No style selected yet.");
+      return;
+    }
+
+    if (!ENABLED_STYLE_IDS.has(style)) {
+      console.warn(`Round generation for ${style} not wired up yet.`);
+      return;
+    }
+
     try {
-      const res = await fetch("/api/round");
+      const res = await fetch(`/api/round?style=${encodeURIComponent(style)}`);
       const data = await res.json();
       clearBreakInterval();
       clearPlayTimeout();
@@ -237,7 +257,29 @@ function App() {
     <div>
       <h1>Ballroom DJ</h1>
 
-      <button onClick={generateRound}>Generate New Round</button>
+      <div>
+        {STYLE_OPTIONS.map((style) => (
+          <button
+            key={style.id}
+            onClick={() => setSelectedStyle(style.id)}
+            disabled={!ENABLED_STYLE_IDS.has(style.id)}
+            className={selectedStyle === style.id ? "active" : ""}
+          >
+            {style.label}
+          </button>
+        ))}
+      </div>
+
+      {selectedStyle && (
+        <button
+          onClick={() => generateRound(selectedStyle)}
+          disabled={!ENABLED_STYLE_IDS.has(selectedStyle)}
+        >
+          Generate {
+            STYLE_OPTIONS.find((s) => s.id === selectedStyle)?.label || ""
+          } Round
+        </button>
+      )}
       <div>
         <label htmlFor="break-duration-slider">
           Break Duration: {breakDurationSeconds} seconds
