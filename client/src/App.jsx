@@ -22,7 +22,6 @@ function App() {
   const [round, setRound] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(null);
   const [breakTimeLeft, setBreakTimeLeft] = useState(null);
-  const [isRoundActive, setIsRoundActive] = useState(false);
   const [selectedStyle, setSelectedStyle] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -103,7 +102,6 @@ function App() {
       setIsPlaying(false);
       setCurrentTime(0);
       setDuration(0);
-      setIsRoundActive(false);
       advancingRef.current = false;
       return;
     }
@@ -153,7 +151,6 @@ function App() {
       setIsPlaying(false);
       setCurrentTime(0);
       setDuration(0);
-      setIsRoundActive(data.length > 0);
       advancingRef.current = false;
     } catch (e) {
       console.error("Error fetching round:", e);
@@ -194,6 +191,20 @@ function App() {
     return `${minutes}:${seconds}`;
   };
 
+  const getDisplayName = (fileUrl) => {
+    if (!fileUrl) return "No song available";
+
+    try {
+      const { pathname } = new URL(fileUrl);
+      const filename = pathname.split("/").pop();
+      if (!filename) return "Unknown file";
+      return decodeURIComponent(filename);
+    } catch (e) {
+      const fallback = fileUrl.split("/").pop();
+      return fallback ? decodeURIComponent(fallback) : "Unknown file";
+    }
+  };
+
   const handleSkip = () => {
     if (currentIndex === null) return;
 
@@ -209,15 +220,25 @@ function App() {
   };
 
   const handleTogglePlayback = () => {
-    if (!audioRef.current) return;
+    if (round.length === 0) return;
 
     if (isPlaying) {
-      audioRef.current.pause();
-    } else {
-      audioRef.current.play().catch((err) => {
-        console.error("Audio play error:", err);
-      });
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+      return;
     }
+
+    if (currentIndex === null) {
+      startBreakThenNext();
+      return;
+    }
+
+    if (!audioRef.current) return;
+
+    audioRef.current.play().catch((err) => {
+      console.error("Audio play error:", err);
+    });
   };
 
   useEffect(() => {
@@ -227,18 +248,6 @@ function App() {
     setIsPlaying(false);
     clearPlayTimeout();
   }, [currentIndex, round]);
-
-  useEffect(() => {
-    if (
-      isRoundActive &&
-      round.length > 0 &&
-      currentIndex === null &&
-      breakTimeLeft === null &&
-      !advancingRef.current
-    ) {
-      startBreakThenNext();
-    }
-  }, [isRoundActive, round, currentIndex, breakTimeLeft]);
 
   useEffect(
     () => () => {
@@ -253,33 +262,15 @@ function App() {
     : songDurationSeconds;
   const effectiveCurrentTime = Math.min(currentTime, effectiveDuration);
 
-  return (
-    <div>
-      <h1>Ballroom DJ</h1>
-
-      <div>
-        {STYLE_OPTIONS.map((style) => (
-          <button
-            key={style.id}
-            onClick={() => setSelectedStyle(style.id)}
-            disabled={!ENABLED_STYLE_IDS.has(style.id)}
-            className={selectedStyle === style.id ? "active" : ""}
-          >
-            {style.label}
-          </button>
-        ))}
-      </div>
-
-      {selectedStyle && (
-        <button
-          onClick={() => generateRound(selectedStyle)}
-          disabled={!ENABLED_STYLE_IDS.has(selectedStyle)}
-        >
-          Generate {
-            STYLE_OPTIONS.find((s) => s.id === selectedStyle)?.label || ""
-          } Round
-        </button>
-      )}
+  const durationControls = (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: "0.75rem",
+        alignSelf: "center",
+      }}
+    >
       <div>
         <label htmlFor="break-duration-slider">
           Break Duration: {breakDurationSeconds} seconds
@@ -314,18 +305,81 @@ function App() {
           }}
         />
       </div>
+    </div>
+  );
 
-      {round.length > 0 && (
-        <div>
-          <h2>Current Round</h2>
-          <ul>
-            {round.map((s, i) => (
-              <li key={i}>
-                {s.dance}: {s.file ? s.file.split("/").pop() : "No song available"}
-              </li>
-            ))}
-          </ul>
+  return (
+    <div>
+      <h1>Ballroom DJ</h1>
+
+      <div>
+        {STYLE_OPTIONS.map((style) => (
+          <button
+            key={style.id}
+            onClick={() => {
+              setSelectedStyle(style.id);
+              if (ENABLED_STYLE_IDS.has(style.id)) {
+                generateRound(style.id);
+              }
+            }}
+            disabled={!ENABLED_STYLE_IDS.has(style.id)}
+            className={selectedStyle === style.id ? "active" : ""}
+          >
+            {style.label}
+          </button>
+        ))}
+      </div>
+
+      {round.length > 0 ? (
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "1.5rem",
+            alignItems: "center",
+          }}
+        >
+          <div style={{ alignSelf: "flex-start" }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "0.75rem",
+              }}
+            >
+              <h2 style={{ margin: 0 }}>Current Round</h2>
+              <button
+                onClick={() => {
+                  if (selectedStyle) {
+                    generateRound(selectedStyle);
+                  }
+                }}
+                disabled={!selectedStyle || !ENABLED_STYLE_IDS.has(selectedStyle)}
+              >
+                🔄
+              </button>
+            </div>
+            <ul>
+              {round.map((s, i) => (
+                <li key={i}>
+                  {s.dance}: {getDisplayName(s.file)}
+                </li>
+              ))}
+            </ul>
+
+            {currentIndex === null && (
+              <button
+                onClick={handleTogglePlayback}
+                disabled={breakTimeLeft !== null}
+              >
+                Start Round
+              </button>
+            )}
+          </div>
+          {durationControls}
         </div>
+      ) : (
+        <div style={{ marginTop: "1rem" }}>{durationControls}</div>
       )}
 
       {currentIndex !== null && round[currentIndex]?.file && (
@@ -344,7 +398,7 @@ function App() {
             onClick={handleTogglePlayback}
             disabled={breakTimeLeft !== null}
           >
-            {isPlaying ? "Pause" : "Play"}
+            {isPlaying ? "⏸️" : "▶️"}
           </button>
           <div>
             <progress
