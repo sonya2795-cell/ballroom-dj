@@ -36,6 +36,29 @@ async function getRandomFile(folderPath) {
   return url;
 }
 
+async function getAllFilesWithUrls(folderPath) {
+  const [files] = await bucket.getFiles({ prefix: folderPath + "/" });
+  const mp3Files = files.filter((f) => f.name.endsWith(".mp3"));
+
+  const entries = await Promise.all(
+    mp3Files.map(async (file) => {
+      const [url] = await file.getSignedUrl({
+        action: "read",
+        expires: "03-01-2030",
+      });
+
+      const filename = file.name.split("/").pop() || file.name;
+
+      return {
+        file: url,
+        filename,
+      };
+    })
+  );
+
+  return entries;
+}
+
 const STYLE_CONFIG = {
   ballroom: {
     baseFolder: "Ballroom",
@@ -162,19 +185,25 @@ app.get("/api/practice", async (req, res) => {
       return;
     }
 
-    const url = await getRandomFile(
+    const tracks = await getAllFilesWithUrls(
       `${config.baseFolder}/${danceConfig.folder}`
     );
 
-    if (!url) {
+    if (tracks.length === 0) {
       res.status(404).json({ error: "No tracks available" });
       return;
     }
 
+    const shuffledTracks = [...tracks];
+    for (let i = shuffledTracks.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffledTracks[i], shuffledTracks[j]] = [shuffledTracks[j], shuffledTracks[i]];
+    }
+
     res.json({
       dance: danceConfig.label,
-      file: url,
       danceId: danceConfig.folder,
+      tracks: shuffledTracks,
     });
   } catch (err) {
     console.error("❌ Error generating practice track:", err);
