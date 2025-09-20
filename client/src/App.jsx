@@ -320,6 +320,13 @@ function App() {
     ? Math.min(duration, songDurationSeconds)
     : songDurationSeconds;
   const effectiveCurrentTime = Math.min(currentTime, effectiveDuration);
+  const progressPercent = Math.min(
+    100,
+    Math.max(
+      0,
+      effectiveDuration > 0 ? (effectiveCurrentTime / effectiveDuration) * 100 : 0,
+    ),
+  );
 
   const durationControls = (
     <div
@@ -341,6 +348,7 @@ function App() {
           max={BREAK_MAX_SECONDS}
           step={1}
           value={breakDurationSeconds}
+          className="neomorphus-slider"
           onChange={(e) => setBreakDurationSeconds(Number(e.target.value))}
         />
       </div>
@@ -355,6 +363,7 @@ function App() {
           max={SONG_MAX_SECONDS}
           step={SONG_STEP_SECONDS}
           value={songDurationSeconds}
+          className="neomorphus-slider"
           onChange={(e) => {
             const nextValue = Number(e.target.value);
             setSongDurationSeconds(nextValue);
@@ -454,10 +463,9 @@ function App() {
               ))}
             </ul>
 
-            {currentIndex === null && (
+            {currentIndex === null && breakTimeLeft === null && (
               <button
                 onClick={handleTogglePlayback}
-                disabled={breakTimeLeft !== null}
                 className="neomorphus-button"
               >
                 Start Round
@@ -480,16 +488,17 @@ function App() {
             Now Playing ({currentIndex + 1}/{round.length}):{" "}
             {round[currentIndex].dance}
           </p>
-          <button
-            onClick={handleSkip}
-            disabled={breakTimeLeft !== null}
-            className="neomorphus-button"
-            style={{
-              fontSize: "1.1rem",
-            }}
-          >
-            Next Song
-          </button>
+          {breakTimeLeft === null && (
+            <button
+              onClick={handleSkip}
+              className="neomorphus-button"
+              style={{
+                fontSize: "1.1rem",
+              }}
+            >
+              Next Song
+            </button>
+          )}
           <button
             onClick={handleTogglePlayback}
             disabled={breakTimeLeft !== null}
@@ -501,11 +510,17 @@ function App() {
             {isPlaying ? "⏸️" : "▶️"}
           </button>
           <div>
-            <progress
-              value={effectiveCurrentTime}
-              max={effectiveDuration}
-              className="round-progress"
-            />
+            <div className="round-progress-wrapper">
+              <progress
+                value={effectiveCurrentTime}
+                max={effectiveDuration}
+                className="round-progress"
+              />
+              <div
+                className="round-progress-thumb"
+                style={{ left: `${progressPercent}%` }}
+              />
+            </div>
             <span>
               {formatTime(effectiveCurrentTime)} / {formatTime(effectiveDuration)}
             </span>
