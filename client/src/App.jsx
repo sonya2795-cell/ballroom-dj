@@ -14,6 +14,11 @@ const STYLE_OPTIONS = [
   { id: "smooth", label: "Smooth" },
 ];
 
+const MODE_OPTIONS = [
+  { id: "round", label: "Round" },
+  { id: "practice", label: "Practice" },
+];
+
 const ENABLED_STYLE_IDS = new Set(["latin", "ballroom"]);
 
 const SONG_MIN_SECONDS = 60;
@@ -32,6 +37,7 @@ function App() {
   const [breakTimeLeft, setBreakTimeLeft] = useState(null);
   const [upcomingIndex, setUpcomingIndex] = useState(null);
   const [selectedStyle, setSelectedStyle] = useState(null);
+  const [selectedMode, setSelectedMode] = useState("round");
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -41,11 +47,17 @@ function App() {
   const [songDurationSeconds, setSongDurationSeconds] = useState(
     DEFAULT_SONG_SECONDS
   );
+  const [practiceDances, setPracticeDances] = useState([]);
+  const [practiceTrack, setPracticeTrack] = useState(null);
+  const [practiceLoadingDance, setPracticeLoadingDance] = useState(null);
+  const [practiceError, setPracticeError] = useState(null);
+  const [practiceDancesLoading, setPracticeDancesLoading] = useState(false);
   const audioRef = useRef(null);
   const playTimeoutRef = useRef(null);
   const breakIntervalRef = useRef(null);
   const activationAudioRef = useRef(null);
   const hasPrimedAudioRef = useRef(false);
+  const practiceAudioRef = useRef(null);
 
   // Prevent duplicate advancing
   const advancingRef = useRef(false);
@@ -83,6 +95,32 @@ function App() {
       clearTimeout(playTimeoutRef.current);
       playTimeoutRef.current = null;
     }
+  };
+
+  const stopRoundPlayback = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+
+    clearBreakInterval();
+    clearPlayTimeout();
+    setIsPlaying(false);
+    setCurrentIndex(null);
+    setBreakTimeLeft(null);
+    setUpcomingIndex(null);
+    setCurrentTime(0);
+    setDuration(0);
+  };
+
+  const resetPracticeState = () => {
+    if (practiceAudioRef.current) {
+      practiceAudioRef.current.pause();
+      practiceAudioRef.current.currentTime = 0;
+    }
+
+    setPracticeTrack(null);
+    setPracticeLoadingDance(null);
   };
 
   const schedulePlayTimeout = (durationOverrideSeconds = songDurationSeconds) => {
@@ -219,6 +257,83 @@ function App() {
     setCurrentTime(event.target.currentTime || 0);
   };
 
+  const handleSelectStyle = (styleId) => {
+    stopRoundPlayback();
+    resetPracticeState();
+    setRound([]);
+    setPracticeDances([]);
+    setPracticeError(null);
+    setPracticeDancesLoading(false);
+    setSelectedStyle(styleId);
+
+    if (!ENABLED_STYLE_IDS.has(styleId)) {
+      return;
+    }
+
+    if (selectedMode === "round") {
+      generateRound(styleId);
+    }
+  };
+
+  const handleModeChange = (modeId) => {
+    if (modeId === selectedMode) return;
+
+    if (modeId === "practice") {
+      stopRoundPlayback();
+      setRound([]);
+    } else {
+      resetPracticeState();
+      setPracticeDancesLoading(false);
+      setPracticeError(null);
+      setPracticeDances([]);
+    }
+
+    setSelectedMode(modeId);
+
+    if (
+      modeId === "round" &&
+      selectedStyle &&
+      ENABLED_STYLE_IDS.has(selectedStyle) &&
+      round.length === 0
+    ) {
+      generateRound(selectedStyle);
+    }
+  };
+
+  const handlePracticeRequest = async (danceId) => {
+    if (!selectedStyle || !ENABLED_STYLE_IDS.has(selectedStyle)) return;
+
+    setPracticeLoadingDance(danceId);
+    setPracticeError(null);
+
+    try {
+      const res = await fetch(
+        `/api/practice?style=${encodeURIComponent(
+          selectedStyle
+        )}&dance=${encodeURIComponent(danceId)}`
+      );
+      const payload = await res.json();
+
+      if (!res.ok) {
+        throw new Error(payload.error ?? "Failed to load practice track");
+      }
+
+      try {
+        await primeAudioActivation();
+      } catch (activationError) {
+        console.warn("Practice autoplay prime failed", activationError);
+      }
+
+      setPracticeTrack({ ...payload, style: selectedStyle });
+    } catch (err) {
+      console.error("Error loading practice track:", err);
+      setPracticeTrack(null);
+      setPracticeError(err?.message ?? "Failed to load practice track");
+    } finally {
+      setPracticeLoadingDance(null);
+    }
+  };
+
   const formatTime = (timeInSeconds) => {
     if (!Number.isFinite(timeInSeconds)) return "0:00";
     const totalSeconds = Math.max(0, Math.floor(timeInSeconds));
@@ -235,7 +350,7 @@ function App() {
       const filename = pathname.split("/").pop();
       if (!filename) return "Unknown file";
       return decodeURIComponent(filename);
-    } catch (e) {
+    } catch {
       const fallback = fileUrl.split("/").pop();
       return fallback ? decodeURIComponent(fallback) : "Unknown file";
     }
@@ -287,6 +402,69 @@ function App() {
           });
       });
   };
+
+  useEffect(() => {
+    const styleEnabled =
+      !!selectedStyle && ENABLED_STYLE_IDS.has(selectedStyle);
+
+    if (!styleEnabled || selectedMode !== "practice") {
+      resetPracticeState();
+      setPracticeError(null);
+      setPracticeDances((prev) => (prev.length === 0 ? prev : []));
+      setPracticeDancesLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    resetPracticeState();
+    setPracticeError(null);
+    setPracticeDances((prev) => (prev.length === 0 ? prev : []));
+    setPracticeDancesLoading(true);
+
+    const loadPracticeDances = async () => {
+      try {
+        const res = await fetch(
+          `/api/dances?style=${encodeURIComponent(selectedStyle)}`
+        );
+        const payload = await res.json();
+
+        if (!res.ok) {
+          throw new Error(payload.error ?? "Failed to load practice dances");
+        }
+
+        if (!cancelled) {
+          setPracticeDances(payload);
+          setPracticeDancesLoading(false);
+        }
+      } catch (err) {
+        if (cancelled) return;
+
+        console.error("Error loading practice dances:", err);
+        setPracticeError(
+          err?.message ?? "Failed to load practice dances"
+        );
+        setPracticeDances([]);
+        setPracticeDancesLoading(false);
+      }
+    };
+
+    loadPracticeDances();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedMode, selectedStyle]);
+
+  useEffect(() => {
+    if (!practiceTrack || !practiceAudioRef.current) return;
+
+    practiceAudioRef.current.load();
+    practiceAudioRef.current.currentTime = 0;
+    practiceAudioRef.current
+      .play()
+      .catch((err) => console.error("Practice play error:", err));
+  }, [practiceTrack]);
 
   useEffect(() => {
     // Reset playback indicators whenever we load a new track
@@ -391,12 +569,7 @@ function App() {
         {STYLE_OPTIONS.map((style) => (
           <button
             key={style.id}
-            onClick={() => {
-              setSelectedStyle(style.id);
-              if (ENABLED_STYLE_IDS.has(style.id)) {
-                generateRound(style.id);
-              }
-            }}
+            onClick={() => handleSelectStyle(style.id)}
             disabled={!ENABLED_STYLE_IDS.has(style.id)}
             className={`neomorphus-button${selectedStyle === style.id ? " active" : ""}`}
             style={{
@@ -409,40 +582,71 @@ function App() {
         ))}
       </div>
 
-      {round.length > 0 ? (
+      {selectedStyle && (
         <div
           style={{
             display: "flex",
-            flexWrap: "wrap",
-            gap: "1.5rem",
             alignItems: "center",
+            gap: "0.75rem",
+            marginBottom: "1.5rem",
+            marginTop: "0.5rem",
           }}
         >
-          <div style={{ alignSelf: "flex-start" }}>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "0.75rem",
-              }}
+          {MODE_OPTIONS.map((mode) => (
+            <button
+              key={mode.id}
+              type="button"
+              className={`neomorphus-button${
+                selectedMode === mode.id ? " active" : ""
+              }`}
+              onClick={() => handleModeChange(mode.id)}
             >
-              <h2 style={{ margin: 0 }}>Current Round</h2>
-              <button
-                onClick={() => {
-                  if (selectedStyle) {
-                    generateRound(selectedStyle);
-                  }
+              {mode.label}
+            </button>
+          ))}
+          {selectedMode === "round" && (
+            <button
+              onClick={() => {
+                if (selectedStyle) {
+                  generateRound(selectedStyle);
+                }
+              }}
+              disabled={!selectedStyle || !ENABLED_STYLE_IDS.has(selectedStyle)}
+              className="neomorphus-button"
+              type="button"
+            >
+              🔄
+            </button>
+          )}
+        </div>
+      )}
+
+      {selectedMode === "round" &&
+        (round.length > 0 ? (
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: "1.5rem",
+              alignItems: "center",
+            }}
+          >
+            <div style={{ alignSelf: "flex-start" }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.75rem",
                 }}
-                disabled={!selectedStyle || !ENABLED_STYLE_IDS.has(selectedStyle)}
-                className="neomorphus-button"
               >
-                🔄
-              </button>
-            </div>
-            <ul>
-              {round.map((s, i) => (
-                <li
-                  key={i}
+                <button type="button" className="neomorphus-button active">
+                  Round
+                </button>
+              </div>
+              <ul>
+                {round.map((s, i) => (
+                  <li
+                    key={i}
                   style={{
                     fontSize:
                       currentIndex === i && breakTimeLeft === null
@@ -471,14 +675,91 @@ function App() {
                 Start Round
               </button>
             )}
+            </div>
+            {durationControls}
           </div>
-          {durationControls}
-        </div>
-      ) : (
-        <div style={{ marginTop: "1rem" }}>{durationControls}</div>
+        ) : (
+          <div style={{ marginTop: "1rem" }}>{durationControls}</div>
+        ))}
+
+      {selectedMode === "practice" && selectedStyle && (
+        ENABLED_STYLE_IDS.has(selectedStyle) ? (
+          <div style={{ marginTop: "1rem" }}>
+            {practiceError && (
+              <p style={{ color: "#ff8080" }}>{practiceError}</p>
+            )}
+            {practiceDancesLoading && !practiceError && <p>Loading dances...</p>}
+            {!practiceDancesLoading &&
+              !practiceError &&
+              practiceDances.length === 0 && <p>No dances configured yet.</p>}
+            {practiceDances.length > 0 && (
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: "0.75rem",
+                }}
+              >
+                {practiceDances.map((dance) => (
+                  <button
+                    key={dance.id}
+                    type="button"
+                    className={`neomorphus-button${
+                      practiceTrack?.danceId === dance.id ? " active" : ""
+                    }`}
+                    disabled={
+                      practiceLoadingDance === dance.id || practiceDancesLoading
+                    }
+                    onClick={() => handlePracticeRequest(dance.id)}
+                  >
+                    {practiceLoadingDance === dance.id
+                      ? "Loading..."
+                      : dance.label}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {practiceTrack && practiceTrack.file && (
+              <div style={{ marginTop: "1rem" }}>
+                <p>
+                  Now Practicing: {practiceTrack.dance} - {getDisplayName(
+                    practiceTrack.file
+                  )}
+                </p>
+                <audio
+                  ref={practiceAudioRef}
+                  src={practiceTrack.file}
+                  controls
+                  preload="auto"
+                  onError={(e) =>
+                    console.error(
+                      "Practice audio error:",
+                      e,
+                      "URL:",
+                      practiceTrack.file
+                    )
+                  }
+                />
+              </div>
+            )}
+            {practiceTrack && !practiceTrack.file && (
+              <p style={{ marginTop: "1rem" }}>
+                No tracks available right now for {practiceTrack.dance}.
+              </p>
+            )}
+          </div>
+        ) : (
+          <p style={{ marginTop: "1rem" }}>
+            Practice mode for {
+              STYLE_OPTIONS.find((opt) => opt.id === selectedStyle)?.label ||
+              selectedStyle
+            } is not available yet.
+          </p>
+        )
       )}
 
-      {currentIndex !== null && round[currentIndex]?.file && (
+      {selectedMode === "round" && currentIndex !== null && round[currentIndex]?.file && (
         <div>
           <p
             style={{
@@ -543,7 +824,7 @@ function App() {
         </div>
       )}
 
-      {breakTimeLeft !== null && (
+      {selectedMode === "round" && breakTimeLeft !== null && (
         <div>
           <h3>Next song starts in: {breakTimeLeft} seconds</h3>
         </div>
