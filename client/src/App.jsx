@@ -20,11 +20,17 @@ const SONG_MIN_SECONDS = 60;
 const SONG_MAX_SECONDS = 180;
 const SONG_STEP_SECONDS = 5;
 const DEFAULT_SONG_SECONDS = 90;
+const ACTIVE_FONT_SIZE = "1.5rem";
+const UPCOMING_FONT_SIZE = "1.25rem";
+const BACKGROUND_COLOR = "#30333a";
+const TEXT_COLOR = "#f2f4f7";
+const HIGHLIGHT_COLOR = "#25ed75";
 
 function App() {
   const [round, setRound] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(null);
   const [breakTimeLeft, setBreakTimeLeft] = useState(null);
+  const [upcomingIndex, setUpcomingIndex] = useState(null);
   const [selectedStyle, setSelectedStyle] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -128,6 +134,7 @@ function App() {
       setIsPlaying(false);
       setCurrentTime(0);
       setDuration(0);
+      setUpcomingIndex(null);
       advancingRef.current = false;
       return;
     }
@@ -137,6 +144,7 @@ function App() {
 
     let countdown = breakDurationSeconds;
     setBreakTimeLeft(countdown);
+    setUpcomingIndex(nextIndex);
 
     breakIntervalRef.current = setInterval(() => {
       countdown -= 1;
@@ -149,6 +157,7 @@ function App() {
         setCurrentTime(0);
         setDuration(0);
         setIsPlaying(false);
+        setUpcomingIndex(null);
         advancingRef.current = false;
       }
     }, 1000);
@@ -177,6 +186,7 @@ function App() {
       setIsPlaying(false);
       setCurrentTime(0);
       setDuration(0);
+      setUpcomingIndex(null);
       advancingRef.current = false;
     } catch (e) {
       console.error("Error fetching round:", e);
@@ -286,6 +296,18 @@ function App() {
     clearPlayTimeout();
   }, [currentIndex, round]);
 
+  useEffect(() => {
+    const previousBackground = document.body.style.backgroundColor;
+    const previousColor = document.body.style.color;
+    document.body.style.backgroundColor = BACKGROUND_COLOR;
+    document.body.style.color = TEXT_COLOR;
+
+    return () => {
+      document.body.style.backgroundColor = previousBackground;
+      document.body.style.color = previousColor;
+    };
+  }, []);
+
   useEffect(
     () => () => {
       clearPlayTimeout();
@@ -346,7 +368,14 @@ function App() {
   );
 
   return (
-    <div>
+    <div
+      style={{
+        minHeight: "100vh",
+        backgroundColor: BACKGROUND_COLOR,
+        color: TEXT_COLOR,
+        paddingBottom: "2rem",
+      }}
+    >
       <h1>Ballroom DJ</h1>
 
       <div>
@@ -361,6 +390,17 @@ function App() {
             }}
             disabled={!ENABLED_STYLE_IDS.has(style.id)}
             className={selectedStyle === style.id ? "active" : ""}
+            style={{
+              backgroundColor: "#30333a",
+              color: "#ffffff",
+              border: "1px solid #50545d",
+              borderRadius: "0.5rem",
+              padding: "0.4rem 0.9rem",
+              marginRight: "0.75rem",
+              marginBottom: "0.75rem",
+              cursor: ENABLED_STYLE_IDS.has(style.id) ? "pointer" : "not-allowed",
+              opacity: ENABLED_STYLE_IDS.has(style.id) ? 1 : 0.4,
+            }}
           >
             {style.label}
           </button>
@@ -402,7 +442,17 @@ function App() {
                   key={i}
                   style={{
                     fontSize:
-                      currentIndex === i ? "1.5rem" : undefined,
+                      currentIndex === i && breakTimeLeft === null
+                        ? ACTIVE_FONT_SIZE
+                        : breakTimeLeft !== null && upcomingIndex === i
+                        ? UPCOMING_FONT_SIZE
+                        : undefined,
+                    color:
+                      currentIndex === i && breakTimeLeft === null
+                        ? HIGHLIGHT_COLOR
+                        : breakTimeLeft !== null && upcomingIndex === i
+                        ? HIGHLIGHT_COLOR
+                        : undefined,
                   }}
                 >
                   {s.dance}: {getDisplayName(s.file)}
@@ -427,7 +477,11 @@ function App() {
 
       {currentIndex !== null && round[currentIndex]?.file && (
         <div>
-          <p>
+          <p
+            style={{
+              color: breakTimeLeft === null ? HIGHLIGHT_COLOR : TEXT_COLOR,
+            }}
+          >
             Now Playing ({currentIndex + 1}/{round.length}):{" "}
             {round[currentIndex].dance}
           </p>
