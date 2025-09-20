@@ -1,0 +1,53 @@
+.neomorphus-button {
+  background-color: #30333a;
+  color: #ffffff;
+  border: none;
+  border-radius: 0.5rem;
+  padding: 0.4rem 0.9rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  box-shadow: 3px 3px 5px #131417, -3px -3px 5px #4d525d;
+  cursor: pointer;
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.neomorphus-button:hover:not(:disabled) {
+  box-shadow: inset 2px 2px 4px #1f2126, inset -2px -2px 4px #41454e;
+}
+
+.neomorphus-button.active {
+  color: #25ed27;
+}
+
+.neomorphus-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  box-shadow: inset 1px 1px 2px #1f2126, inset -1px -1px 2px #41454e;
+}
+
+.neomorphus-button:focus-visible {
+  outline: 2px solid #4d525d;
+  outline-offset: 2px;
+}
+
+.round-progress {
+  width: 100%;
+  height: 0.65rem;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  background-color: #1b1d21;
+}
+
+.round-progress::-webkit-progress-bar {
+  background-color: transparent;
+}
+
+.round-progress::-webkit-progress-value {
+  background-color: #25ed27;
+}
+
+.round-progress::-moz-progress-bar {
+  background-color: #25ed27;
+}

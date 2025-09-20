@@ -389,17 +389,10 @@ function App() {
               }
             }}
             disabled={!ENABLED_STYLE_IDS.has(style.id)}
-            className={selectedStyle === style.id ? "active" : ""}
+            className={`neomorphus-button${selectedStyle === style.id ? " active" : ""}`}
             style={{
-              backgroundColor: "#30333a",
-              color: "#ffffff",
-              border: "1px solid #50545d",
-              borderRadius: "0.5rem",
-              padding: "0.4rem 0.9rem",
               marginRight: "0.75rem",
               marginBottom: "0.75rem",
-              cursor: ENABLED_STYLE_IDS.has(style.id) ? "pointer" : "not-allowed",
-              opacity: ENABLED_STYLE_IDS.has(style.id) ? 1 : 0.4,
             }}
           >
             {style.label}
@@ -432,6 +425,7 @@ function App() {
                   }
                 }}
                 disabled={!selectedStyle || !ENABLED_STYLE_IDS.has(selectedStyle)}
+                className="neomorphus-button"
               >
                 🔄
               </button>
@@ -464,6 +458,7 @@ function App() {
               <button
                 onClick={handleTogglePlayback}
                 disabled={breakTimeLeft !== null}
+                className="neomorphus-button"
               >
                 Start Round
               </button>
@@ -488,12 +483,9 @@ function App() {
           <button
             onClick={handleSkip}
             disabled={breakTimeLeft !== null}
+            className="neomorphus-button"
             style={{
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
               fontSize: "1.1rem",
-              padding: "0.4rem 0.8rem",
             }}
           >
             Next Song
@@ -501,12 +493,9 @@ function App() {
           <button
             onClick={handleTogglePlayback}
             disabled={breakTimeLeft !== null}
+            className="neomorphus-button"
             style={{
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
               fontSize: "1.1rem",
-              padding: "0.4rem 0.8rem",
             }}
           >
             {isPlaying ? "⏸️" : "▶️"}
@@ -515,6 +504,7 @@ function App() {
             <progress
               value={effectiveCurrentTime}
               max={effectiveDuration}
+              className="round-progress"
             />
             <span>
               {formatTime(effectiveCurrentTime)} / {formatTime(effectiveDuration)}
