@@ -57,6 +57,25 @@ const STYLE_CONFIG = {
       { folder: "Jive", label: "Jive" },
     ],
   },
+  rhythm: {
+    baseFolder: "Rhythm",
+    dances: [
+      { folder: "ChaCha", label: "Cha Cha" },
+      { folder: "Rumba", label: "Rumba" },
+      { folder: "EastCoastSwing", label: "East Coast Swing" },
+      { folder: "Bolero", label: "Bolero" },
+      { folder: "Mambo", label: "Mambo" },
+    ],
+  },
+  smooth: {
+    baseFolder: "Smooth",
+    dances: [
+      { folder: "Waltz", label: "Waltz" },
+      { folder: "Tango", label: "Tango" },
+      { folder: "Foxtrot", label: "Foxtrot" },
+      { folder: "VienneseWaltz", label: "Viennese Waltz" },
+    ],
+  },
 };
 
 // --- ROUTES ---
@@ -94,6 +113,72 @@ app.get("/api/round", async (req, res) => {
   } catch (err) {
     console.error("❌ Error generating round:", err);
     res.status(500).json({ error: "Failed to generate round" });
+  }
+});
+
+app.get("/api/dances", (req, res) => {
+  const requestedStyle = (req.query.style || "ballroom").toLowerCase();
+  const config = STYLE_CONFIG[requestedStyle];
+
+  if (!config) {
+    res
+      .status(400)
+      .json({ error: `Unsupported style '${req.query.style ?? ""}'` });
+    return;
+  }
+
+  res.json(config.dances.map(({ folder, label }) => ({ id: folder, label })));
+});
+
+app.get("/api/practice", async (req, res) => {
+  try {
+    const requestedStyle = (req.query.style || "ballroom").toLowerCase();
+    const requestedDance = req.query.dance;
+
+    if (!requestedDance) {
+      res.status(400).json({ error: "Missing 'dance' query parameter" });
+      return;
+    }
+
+    const config = STYLE_CONFIG[requestedStyle];
+
+    if (!config) {
+      res
+        .status(400)
+        .json({ error: `Unsupported style '${req.query.style ?? ""}'` });
+      return;
+    }
+
+    const danceConfig = config.dances.find(
+      ({ folder }) => folder.toLowerCase() === requestedDance.toLowerCase()
+    );
+
+    if (!danceConfig) {
+      res
+        .status(400)
+        .json({
+          error: `Unsupported dance '${requestedDance}' for style '${requestedStyle}'`,
+        });
+      return;
+    }
+
+    const url = await getRandomFile(
+      `${config.baseFolder}/${danceConfig.folder}`
+    );
+
+    if (!url) {
+      res.status(404).json({ error: "No tracks available" });
+      return;
+    }
+
+    res.json({
+      dance: danceConfig.label,
+      file: url,
+      danceId: danceConfig.folder,
+    });
+  } catch (err) {
+    console.error("❌ Error generating practice track:", err);
+    res.status(500).json({ error: "Failed to generate practice track" });
   }
 });
 
