@@ -70,16 +70,23 @@ textarea {
 }
 
 .style-button-group {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   width: 100%;
-  justify-content: space-evenly;
-  gap: 1rem;
+  gap: 0;
 }
 
 .style-button {
   font-size: 1.215rem;
   padding: 0.486rem 1.1rem;
+  width: 100%;
+}
+
+.style-button-no-shadow,
+.style-button-no-shadow:hover:not(:disabled),
+.style-button-no-shadow:disabled,
+.style-button-no-shadow.active {
+  box-shadow: none !important;
 }
 
 .style-button-highlight,
@@ -92,9 +99,9 @@ textarea {
   position: absolute;
   top: -6px;
   bottom: -6px;
-  left: -43.75%;
-  right: -43.75%;
-  border: 2px solid #25ed27;
+  left: 0;
+  right: 0;
+  border: 1px solid #6e6e6e;
   border-bottom: none;
   border-radius: 0.75rem 0.75rem 0 0;
   pointer-events: none;
@@ -103,10 +110,11 @@ textarea {
 .style-button-highlight-inactive::after {
   content: "";
   position: absolute;
-  bottom: -4px;
-  left: -43.75%;
-  right: -43.75%;
-  border-bottom: 2px solid #25ed27;
+  top: -6px;
+  bottom: -6px;
+  left: 0;
+  right: 0;
+  border-bottom: 1px solid #6e6e6e;
   pointer-events: none;
 }
 

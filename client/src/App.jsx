@@ -756,6 +756,10 @@ function App() {
                   selectedStyle === style.id
                     ? " style-button-highlight"
                     : " style-button-highlight-inactive"
+                }${
+                  style.id === "ballroom" || style.id === "latin"
+                    ? " style-button-no-shadow"
+                    : ""
                 }`}
               >
                 {style.label}
