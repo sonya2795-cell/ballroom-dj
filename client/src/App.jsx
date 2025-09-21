@@ -3,6 +3,8 @@ import { useState, useEffect, useRef } from "react";
 const BREAK_MIN_SECONDS = 5;
 const BREAK_MAX_SECONDS = 30;
 const DEFAULT_BREAK_SECONDS = BREAK_MIN_SECONDS;
+const ROUND_FADE_OUT_SECONDS = 5;
+const ROUND_FADE_INTERVAL_MS = 50;
 
 const SILENCE_WAV =
   "data:audio/wav;base64,UklGRqQMAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YYAMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==";
@@ -58,6 +60,8 @@ function App() {
   const [practiceDuration, setPracticeDuration] = useState(0);
   const audioRef = useRef(null);
   const playTimeoutRef = useRef(null);
+  const fadeTimeoutRef = useRef(null);
+  const fadeIntervalRef = useRef(null);
   const breakIntervalRef = useRef(null);
   const activationAudioRef = useRef(null);
   const hasPrimedAudioRef = useRef(false);
@@ -101,6 +105,58 @@ function App() {
     }
   };
 
+  const clearFadeTimers = ({ resetVolume = false } = {}) => {
+    if (fadeTimeoutRef.current) {
+      clearTimeout(fadeTimeoutRef.current);
+      fadeTimeoutRef.current = null;
+    }
+
+    if (fadeIntervalRef.current) {
+      clearInterval(fadeIntervalRef.current);
+      fadeIntervalRef.current = null;
+    }
+
+    if (resetVolume && audioRef.current) {
+      audioRef.current.volume = 1;
+    }
+  };
+
+  const startFadeOut = (fadeDurationMs) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const totalMs = Math.max(fadeDurationMs, 0);
+
+    if (totalMs === 0) {
+      audio.volume = 0;
+      return;
+    }
+
+    const startVolume = audio.volume ?? 1;
+    if (startVolume <= 0) return;
+
+    fadeTimeoutRef.current = null;
+
+    const startedAt = Date.now();
+
+    if (fadeIntervalRef.current) {
+      clearInterval(fadeIntervalRef.current);
+      fadeIntervalRef.current = null;
+    }
+
+    fadeIntervalRef.current = setInterval(() => {
+      const elapsed = Date.now() - startedAt;
+      const progress = Math.min(elapsed / totalMs, 1);
+      const nextVolume = Math.max(startVolume * (1 - progress), 0);
+      audio.volume = nextVolume;
+
+      if (progress >= 1) {
+        clearInterval(fadeIntervalRef.current);
+        fadeIntervalRef.current = null;
+      }
+    }, ROUND_FADE_INTERVAL_MS);
+  };
+
   const stopRoundPlayback = () => {
     if (audioRef.current) {
       audioRef.current.pause();
@@ -109,6 +165,7 @@ function App() {
 
     clearBreakInterval();
     clearPlayTimeout();
+    clearFadeTimers({ resetVolume: true });
     setIsPlaying(false);
     setCurrentIndex(null);
     setBreakTimeLeft(null);
@@ -133,6 +190,7 @@ function App() {
 
   const schedulePlayTimeout = (durationOverrideSeconds = songDurationSeconds) => {
     clearPlayTimeout();
+    clearFadeTimers({ resetVolume: true });
 
     const audio = audioRef.current;
     const targetSeconds = durationOverrideSeconds;
@@ -147,6 +205,23 @@ function App() {
       setIsPlaying(false);
       startBreakThenNext();
       return;
+    }
+
+    const fadeDurationMs = Math.min(
+      ROUND_FADE_OUT_SECONDS * 1000,
+      remainingMilliseconds
+    );
+
+    if (fadeDurationMs > 0) {
+      const fadeDelay = Math.max(remainingMilliseconds - fadeDurationMs, 0);
+
+      if (fadeDelay === 0) {
+        startFadeOut(fadeDurationMs);
+      } else {
+        fadeTimeoutRef.current = setTimeout(() => {
+          startFadeOut(fadeDurationMs);
+        }, fadeDelay);
+      }
     }
 
     playTimeoutRef.current = setTimeout(() => {
@@ -170,6 +245,7 @@ function App() {
     if (advancingRef.current) return;
 
     clearPlayTimeout();
+    clearFadeTimers();
 
     const nextIndex = getNextIndex();
 
@@ -241,10 +317,12 @@ function App() {
 
   const handleEnded = () => {
     clearPlayTimeout();
+    clearFadeTimers();
     startBreakThenNext();
   };
 
   const handlePlay = () => {
+    clearFadeTimers({ resetVolume: true });
     if (audioRef.current) audioRef.current.volume = 1.0;
     setBreakTimeLeft(null);
     setIsPlaying(true);
@@ -254,6 +332,7 @@ function App() {
   const handlePause = () => {
     setIsPlaying(false);
     clearPlayTimeout();
+    clearFadeTimers({ resetVolume: true });
   };
 
   const handleTimeUpdate = (event) => {
@@ -266,6 +345,10 @@ function App() {
   };
 
   const handleSelectStyle = (styleId) => {
+    if (styleId === selectedStyle) {
+      return;
+    }
+
     stopRoundPlayback();
     resetPracticeState();
     setRound([]);
@@ -395,6 +478,7 @@ function App() {
 
     setIsPlaying(false);
     clearPlayTimeout();
+    clearFadeTimers({ resetVolume: true });
 
     startBreakThenNext();
   };
@@ -547,6 +631,7 @@ function App() {
     setDuration(0);
     setIsPlaying(false);
     clearPlayTimeout();
+    clearFadeTimers({ resetVolume: true });
   }, [currentIndex, round]);
 
   useEffect(() => {
@@ -565,6 +650,7 @@ function App() {
     () => () => {
       clearPlayTimeout();
       clearBreakInterval();
+      clearFadeTimers({ resetVolume: true });
     },
     []
   );
@@ -603,53 +689,54 @@ function App() {
     ),
   );
 
-  const durationControls = (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        gap: "0.75rem",
-        alignSelf: "center",
-      }}
-    >
-      <div>
-        <label htmlFor="break-duration-slider">
-          Break Duration: {breakDurationSeconds} seconds
-        </label>
-        <input
-          id="break-duration-slider"
-          type="range"
-          min={BREAK_MIN_SECONDS}
-          max={BREAK_MAX_SECONDS}
-          step={1}
-          value={breakDurationSeconds}
-          className="neomorphus-slider"
-          onChange={(e) => setBreakDurationSeconds(Number(e.target.value))}
-        />
+  const durationControls =
+    selectedStyle !== null ? (
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: "0.75rem",
+          alignSelf: "center",
+        }}
+      >
+        <div>
+          <label htmlFor="break-duration-slider">
+            Break Duration: {breakDurationSeconds} seconds
+          </label>
+          <input
+            id="break-duration-slider"
+            type="range"
+            min={BREAK_MIN_SECONDS}
+            max={BREAK_MAX_SECONDS}
+            step={1}
+            value={breakDurationSeconds}
+            className="neomorphus-slider"
+            onChange={(e) => setBreakDurationSeconds(Number(e.target.value))}
+          />
+        </div>
+        <div>
+          <label htmlFor="song-duration-slider">
+            Song Duration: {formatTime(songDurationSeconds)}
+          </label>
+          <input
+            id="song-duration-slider"
+            type="range"
+            min={SONG_MIN_SECONDS}
+            max={SONG_MAX_SECONDS}
+            step={SONG_STEP_SECONDS}
+            value={songDurationSeconds}
+            className="neomorphus-slider"
+            onChange={(e) => {
+              const nextValue = Number(e.target.value);
+              setSongDurationSeconds(nextValue);
+              if (isPlaying) {
+                schedulePlayTimeout(nextValue);
+              }
+            }}
+          />
+        </div>
       </div>
-      <div>
-        <label htmlFor="song-duration-slider">
-          Song Duration: {formatTime(songDurationSeconds)}
-        </label>
-        <input
-          id="song-duration-slider"
-          type="range"
-          min={SONG_MIN_SECONDS}
-          max={SONG_MAX_SECONDS}
-          step={SONG_STEP_SECONDS}
-          value={songDurationSeconds}
-          className="neomorphus-slider"
-          onChange={(e) => {
-            const nextValue = Number(e.target.value);
-            setSongDurationSeconds(nextValue);
-            if (isPlaying) {
-              schedulePlayTimeout(nextValue);
-            }
-          }}
-        />
-      </div>
-    </div>
-  );
+    ) : null;
 
   return (
     <div
@@ -773,9 +860,6 @@ function App() {
               <p style={{ color: "#ff8080" }}>{practiceError}</p>
             )}
             {practiceDancesLoading && !practiceError && <p>Loading dances...</p>}
-            {!practiceDancesLoading &&
-              !practiceError &&
-              practiceDances.length === 0 && <p>No dances configured yet.</p>}
             {practiceDances.length > 0 && (
               <div>
                 <div
