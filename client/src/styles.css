@@ -1,3 +1,59 @@
+@import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@300;400;500;600;700&display=swap');
+
+:root {
+  --text-xl: clamp(2.5rem, 6vw, 3.25rem);
+}
+
+body,
+button,
+input,
+select,
+textarea {
+  font-family: 'Quicksand', sans-serif;
+}
+
+.app-root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 0 1rem 2rem;
+  background-color: #30333a;
+  color: #f2f4f7;
+}
+
+.app-shell {
+  width: calc(100% - 100px);
+  max-width: calc(80rem - 100px);
+  height: 510px;
+  background-color: rgba(48, 51, 58, 0.7);
+  backdrop-filter: blur(24px);
+  border-radius: 1.5rem;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: flex-start;
+  gap: 1rem;
+  box-shadow: 3px 3px 5px #131417, -3px -3px 5px #4d525d;
+  transition: all 500ms ease-in-out;
+  color: #f2f4f7;
+  margin-top: calc(20vh - 120px);
+}
+
+.app-title {
+  font-family: 'Quicksand', sans-serif;
+  font-weight: 400;
+  font-size: var(--text-xl);
+  margin: 0 0 1.5rem;
+}
+
+.app-title-floating {
+  text-align: center;
+  margin: calc(2rem + 40px) 0 1rem;
+}
+
 .neomorphus-button {
   background-color: #30333a;
   color: #ffffff;
@@ -11,6 +67,47 @@
   box-shadow: 3px 3px 5px #131417, -3px -3px 5px #4d525d;
   cursor: pointer;
   transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.style-button-group {
+  display: flex;
+  flex-wrap: wrap;
+  width: 100%;
+  justify-content: space-evenly;
+  gap: 1rem;
+}
+
+.style-button {
+  font-size: 1.215rem;
+  padding: 0.486rem 1.1rem;
+}
+
+.style-button-highlight,
+.style-button-highlight-inactive {
+  position: relative;
+}
+
+.style-button-highlight::after {
+  content: "";
+  position: absolute;
+  top: -6px;
+  bottom: -6px;
+  left: -43.75%;
+  right: -43.75%;
+  border: 2px solid #25ed27;
+  border-bottom: none;
+  border-radius: 0.75rem 0.75rem 0 0;
+  pointer-events: none;
+}
+
+.style-button-highlight-inactive::after {
+  content: "";
+  position: absolute;
+  bottom: -4px;
+  left: -43.75%;
+  right: -43.75%;
+  border-bottom: 2px solid #25ed27;
+  pointer-events: none;
 }
 
 .neomorphus-button:hover:not(:disabled) {
@@ -35,7 +132,7 @@
 
 .round-progress-wrapper {
   position: relative;
-  width: 66.666%;
+  width: 40%;
   margin: 0 auto;
 }
 
@@ -98,11 +195,12 @@
 .neomorphus-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 15px;
+  width: 11px;
   height: 30px;
   border-radius: 9999px;
   background-color: #30333a;
-  box-shadow: inset 3px 3px 5px #1f2126, inset -3px -3px 5px #41454e;
+  box-shadow: -3px -3px 5px #4d525d, 3px 3px 5px #131417;
+  border: 1px solid #25ed27;
   margin-top: calc((0.65rem - 30px) / 2);
 }
 
@@ -114,12 +212,12 @@
 }
 
 .neomorphus-slider::-moz-range-thumb {
-  width: 15px;
+  width: 11px;
   height: 30px;
   border-radius: 9999px;
   background-color: #30333a;
-  box-shadow: inset 3px 3px 5px #1f2126, inset -3px -3px 5px #41454e;
-  border: none;
+  box-shadow: -3px -3px 5px #4d525d, 3px 3px 5px #131417;
+  border: 1px solid #25ed27;
 }
 
 .neomorphus-slider::-ms-track {
@@ -139,10 +237,11 @@
 }
 
 .neomorphus-slider::-ms-thumb {
-  width: 15px;
+  width: 11px;
   height: 30px;
   border-radius: 9999px;
   background-color: #30333a;
-  box-shadow: inset 3px 3px 5px #1f2126, inset -3px -3px 5px #41454e;
+  box-shadow: -3px -3px 5px #4d525d, 3px 3px 5px #131417;
+  border: 1px solid #25ed27;
   margin-top: 0;
 }
