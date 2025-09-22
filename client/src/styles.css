@@ -105,6 +105,7 @@ textarea {
   border-bottom: none;
   border-radius: 0.75rem 0.75rem 0 0;
   pointer-events: none;
+  box-shadow: -3px -3px 5px #4d525d, 3px -3px 5px #131417;
 }
 
 .style-button-highlight-inactive::after {
@@ -116,6 +117,7 @@ textarea {
   right: 0;
   border-bottom: 1px solid #6e6e6e;
   pointer-events: none;
+  box-shadow: none;
 }
 
 .neomorphus-button:hover:not(:disabled) {
