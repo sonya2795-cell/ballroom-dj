@@ -21,7 +21,7 @@ const MODE_OPTIONS = [
   { id: "practice", label: "Practice" },
 ];
 
-const ENABLED_STYLE_IDS = new Set(["latin", "ballroom"]);
+const ENABLED_STYLE_IDS = new Set(["latin", "ballroom", "rhythm", "smooth"]);
 
 const SONG_MIN_SECONDS = 60;
 const SONG_MAX_SECONDS = 180;
@@ -752,14 +752,6 @@ function App() {
                 disabled={!ENABLED_STYLE_IDS.has(style.id)}
                 className={`neomorphus-button style-button${
                   selectedStyle === style.id ? " active" : ""
-                }${
-                  selectedStyle === style.id
-                    ? " style-button-highlight"
-                    : " style-button-highlight-inactive"
-                }${
-                  style.id === "ballroom" || style.id === "latin"
-                    ? " style-button-no-shadow"
-                    : ""
                 }`}
               >
                 {style.label}
