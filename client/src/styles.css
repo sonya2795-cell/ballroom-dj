@@ -71,62 +71,87 @@ textarea {
 
 .style-button-group {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
   width: 100%;
   gap: 0;
+  grid-template-columns: repeat(4, 1fr);
 }
 
 .style-button {
-  font-size: 1.215rem;
-  padding: 0.486rem 1.1rem;
   width: 100%;
-}
-
-.style-button-no-shadow,
-.style-button-no-shadow:hover:not(:disabled),
-.style-button-no-shadow:disabled,
-.style-button-no-shadow.active {
-  box-shadow: none !important;
-}
-
-.style-button-highlight,
-.style-button-highlight-inactive {
-  position: relative;
-}
-
-.style-button-highlight::after {
-  content: "";
-  position: absolute;
-  top: -6px;
-  bottom: -6px;
-  left: 0;
-  right: 0;
-  border: 1px solid #6e6e6e;
-  border-bottom: none;
-  border-radius: 0.75rem 0.75rem 0 0;
-  pointer-events: none;
-  box-shadow: -3px -3px 5px #4d525d, 3px -3px 5px #131417;
-}
-
-.style-button-highlight-inactive::after {
-  content: "";
-  position: absolute;
-  top: -6px;
-  bottom: -6px;
-  left: 0;
-  right: 0;
-  border-bottom: 1px solid #6e6e6e;
-  pointer-events: none;
+  font-size: calc((var(--text-xl) + 1rem) / 2 * 0.75);
+  padding: 1rem 1.35rem;
   box-shadow: none;
+  border: none;
+  position: relative;
+  border-radius: 1rem 1rem 0 0;
+  background: inherit;
+  color: inherit;
+}
+
+.style-button:not(.active) {
+  border-bottom: 1px solid #41454e;
+}
+
+.style-button:not(.active)::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -0.25rem;
+  height: 0.55rem;
+  border-radius: 0;
+  background: linear-gradient(
+    to top,
+    rgba(77, 82, 93, 0.75),
+    rgba(77, 82, 93, 0)
+  );
+  pointer-events: none;
+  z-index: -1;
+}
+
+.style-button:hover:not(:disabled) {
+  background: inherit;
+  color: inherit;
+  box-shadow: none;
+}
+
+.style-button:not(.active):hover:not(:disabled) {
+  box-shadow: none;
+  color: inherit;
 }
 
 .neomorphus-button:hover:not(:disabled) {
   box-shadow: inset 2px 2px 4px #1f2126, inset -2px -2px 4px #41454e;
 }
 
+.style-button.neomorphus-button:not(.active):hover:not(:disabled) {
+  box-shadow: none;
+  color: inherit;
+}
+
 .neomorphus-button.active {
   color: #25ed27;
   box-shadow: inset 2px 2px 4px #1f2126, inset -2px -2px 4px #41454e;
+}
+
+.style-button.active,
+.style-button.active:hover:not(:disabled) {
+  box-shadow: 3px 0 5px #131417, -3px 0 5px #4d525d, 0 -3px 5px #4d525d;
+  border-bottom: none;
+}
+
+.style-button.active:hover:not(:disabled) {
+  color: #25ed27;
+}
+
+.style-button.active::after {
+  content: "";
+  position: absolute;
+  inset: calc(100% - 0.05rem) 0 auto 0;
+  height: 0.6rem;
+  background: #30333a;
+  border-radius: 0;
+  pointer-events: none;
 }
 
 .neomorphus-button:disabled {
