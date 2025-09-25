@@ -1,12 +1,41 @@
-# React + Vite
+# Ballroom DJ Client
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React + Vite frontend for the Ballroom DJ experience. It fetches authenticated
+rounds and practice playlists from the backend and surfaces provider sign-in
+via Firebase Auth.
 
-Currently, two official plugins are available:
+## Environment variables
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+Copy `.env.example` to `.env` and supply your Firebase web app config:
 
-## Expanding the ESLint configuration
+```bash
+cp .env.example .env
+```
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Required keys:
+
+- `VITE_FIREBASE_API_KEY`
+- `VITE_FIREBASE_AUTH_DOMAIN`
+- `VITE_FIREBASE_PROJECT_ID`
+- `VITE_FIREBASE_STORAGE_BUCKET`
+- `VITE_FIREBASE_MESSAGING_SENDER_ID`
+- `VITE_FIREBASE_APP_ID`
+
+If the backend is not hosted on the same origin, set `VITE_API_ORIGIN` and
+update `fetch` calls accordingly (currently the Vite dev server proxies `/api`
+and `/auth`).
+
+## Scripts
+
+- `npm run dev` – start the Vite dev server (defaults to `http://localhost:5173`).
+- `npm run build` – produce a production build in `dist/`.
+- `npm run preview` – serve the build output locally.
+- `npm run lint` – run ESLint with the configured React rules.
+
+## Auth flow recap
+
+- When a user hits a gated action (Start Round / practice tracks) and is
+  unauthenticated, the client opens the provider modal.
+- Selecting Google/Facebook/Apple launches Firebase `signInWithPopup`, then the
+  client POSTs `/auth/session` to mint a secure session cookie.
+- After a successful login, pending round requests are retried automatically.

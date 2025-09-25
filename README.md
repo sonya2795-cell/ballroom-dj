@@ -1,3 +1,77 @@
 # Ballroom DJ
 
-A web app to sequence music for ballroom dance rounds.
+A web app that sequences ballroom dance rounds and practice playlists. The
+frontend is a Vite + React client; the backend is an Express server that
+pulls tracks from Firebase Storage and now requires users to authenticate with
+Google, Facebook, or Apple before starting a round.
+
+## Prerequisites
+
+- Node.js 18+
+- A Firebase project with Firestore/Storage enabled and provider sign-in
+  (Google, Facebook, Apple) configured.
+- A Firebase service account key stored at `server/firebase-key.json`
+  (already referenced by the server).
+
+## Environment configuration
+
+1. Copy the example environment files and fill in the values from your Firebase
+   project and deployment settings:
+
+   ```bash
+   cp client/.env.example client/.env
+   cp server/.env.example server/.env
+   ```
+
+2. `client/.env` must contain the Firebase web app settings (`VITE_FIREBASE_*`).
+
+3. `server/.env` should list the allowed frontend origins in `CLIENT_ORIGIN`
+   (comma-separated if you have multiple environments). When `NODE_ENV` is set
+   to `production`, session cookies are marked `Secure`.
+
+4. For local development, leave the defaults (`http://localhost:5173`) and run
+   both client and server on the same machine.
+
+## Provider setup tips
+
+- In the Firebase console, enable each provider (Google, Facebook, Apple) and
+  supply the OAuth credentials from their respective developer portals.
+- Add the Firebase Hosting/Vite dev origins to each provider's list of allowed
+  redirect URIs (e.g. `http://localhost:5173` for local testing).
+- To support account linking inside Firebase, allow users to connect additional
+  providers after their first sign-in. The client handles provider linking via
+  the Firebase SDK.
+- Apple Sign In requires a Services ID and private key uploaded to Firebase; be
+  sure to configure those before testing the Apple flow.
+
+## Installing dependencies
+
+```bash
+cd client && npm install
+cd ../server && npm install
+```
+
+## Running the app locally
+
+```bash
+# In one terminal
+cd server
+npm start   # or `node index.js`
+
+# In another terminal
+cd client
+npm run dev
+```
+
+- The Vite dev server proxies `/api/*` and `/auth/*` requests to the Express
+  server (`http://localhost:3000`).
+- When an unauthenticated user clicks **Start Round** (or loads practice
+  tracks), a modal prompts for provider sign-in. Once Firebase issues a session
+  cookie, the client automatically retries any pending round generation.
+
+## Next steps
+
+- Integrate Stripe/Paddle (or your chosen billing provider) to set the
+  subscription tier and store it alongside the Firebase UID.
+- Extend the backend to enforce subscription tiers on the protected routes.
+- Add UI for viewing/updating account details and linked providers if needed.

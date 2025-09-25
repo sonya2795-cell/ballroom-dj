@@ -120,6 +120,11 @@ textarea {
   color: inherit;
 }
 
+.mode-button {
+  font-size: calc(((((var(--text-xl) + 1rem) / 2) * 0.75) + 1rem) / 2);
+  padding: 0.7rem 1.125rem;
+}
+
 .neomorphus-button:hover:not(:disabled) {
   box-shadow: inset 2px 2px 4px #1f2126, inset -2px -2px 4px #41454e;
 }
@@ -213,6 +218,7 @@ textarea {
   border-radius: 0.5rem;
   background: transparent;
   cursor: pointer;
+  margin-left: 15px;
 }
 
 .neomorphus-slider:focus-visible {
@@ -279,4 +285,69 @@ textarea {
   box-shadow: -3px -3px 5px #4d525d, 3px 3px 5px #131417;
   border: 1px solid #25ed27;
   margin-top: 0;
+}
+
+.auth-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 1000;
+}
+
+.auth-modal {
+  background-color: #2b2e35;
+  color: #f2f4f7;
+  width: min(90vw, 360px);
+  padding: 2rem 2.25rem;
+  border-radius: 1.25rem;
+  box-shadow: -12px -12px 24px rgba(77, 82, 93, 0.2),
+    12px 12px 24px rgba(19, 20, 23, 0.55);
+  text-align: center;
+}
+
+.auth-modal h2 {
+  margin: 0;
+  font-size: 1.35rem;
+}
+
+.auth-modal-subtitle {
+  margin-top: 0.75rem;
+  margin-bottom: 1.75rem;
+  color: #b5bac6;
+  font-size: 0.95rem;
+}
+
+.auth-provider-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.neomorphus-button.provider {
+  width: 100%;
+  justify-content: center;
+}
+
+.neomorphus-button.secondary {
+  background-color: #2b2e35;
+  box-shadow: inset 3px 3px 5px #1f2126, inset -3px -3px 5px #41454e;
+}
+
+.neomorphus-button.secondary:hover:not(:disabled) {
+  box-shadow: inset 3px 3px 5px #1f2126, inset -3px -3px 5px #41454e;
+}
+
+.auth-modal-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  margin-top: 1.5rem;
+}
+
+.auth-modal-error p {
+  margin-top: 0.75rem;
+  color: #ffb3b3;
 }
