@@ -1,4 +1,7 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import AuthModal from "./components/AuthModal.jsx";
+import { useAuth } from "./context/AuthContext.jsx";
+import { fetchWithOrigin } from "./utils/apiClient.js";
 
 const BREAK_MIN_SECONDS = 5;
 const BREAK_MAX_SECONDS = 30;
@@ -34,12 +37,21 @@ const TEXT_COLOR = "#f2f4f7";
 const HIGHLIGHT_COLOR = "#25ed75";
 
 function App() {
+  const {
+    isAuthenticated,
+    isUnauthenticated,
+    login,
+    authError,
+    clearAuthError,
+    isProcessingLogin,
+  } = useAuth();
+  const [showAuthModal, setShowAuthModal] = useState(false);
   const [round, setRound] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(null);
   const [breakTimeLeft, setBreakTimeLeft] = useState(null);
   const [upcomingIndex, setUpcomingIndex] = useState(null);
   const [selectedStyle, setSelectedStyle] = useState(null);
-  const [selectedMode, setSelectedMode] = useState("round");
+  const [selectedMode, setSelectedMode] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -58,6 +70,7 @@ function App() {
   const [practiceIsPlaying, setPracticeIsPlaying] = useState(false);
   const [practiceCurrentTime, setPracticeCurrentTime] = useState(0);
   const [practiceDuration, setPracticeDuration] = useState(0);
+  const [roundAuthBlocked, setRoundAuthBlocked] = useState(false);
   const audioRef = useRef(null);
   const playTimeoutRef = useRef(null);
   const fadeTimeoutRef = useRef(null);
@@ -66,6 +79,9 @@ function App() {
   const activationAudioRef = useRef(null);
   const hasPrimedAudioRef = useRef(false);
   const practiceAudioRef = useRef(null);
+  const pendingRoundStyleRef = useRef(null);
+  const authPromptReasonRef = useRef(null);
+  const authPromptTimeoutRef = useRef(null);
 
   // Prevent duplicate advancing
   const advancingRef = useRef(false);
@@ -91,21 +107,28 @@ function App() {
     }
   };
 
-  const clearBreakInterval = () => {
+  const clearBreakInterval = useCallback(() => {
     if (breakIntervalRef.current) {
       clearInterval(breakIntervalRef.current);
       breakIntervalRef.current = null;
     }
-  };
+  }, []);
 
-  const clearPlayTimeout = () => {
+  const clearPlayTimeout = useCallback(() => {
     if (playTimeoutRef.current) {
       clearTimeout(playTimeoutRef.current);
       playTimeoutRef.current = null;
     }
-  };
+  }, []);
 
-  const clearFadeTimers = ({ resetVolume = false } = {}) => {
+  const clearAuthPromptTimeout = useCallback(() => {
+    if (authPromptTimeoutRef.current) {
+      clearTimeout(authPromptTimeoutRef.current);
+      authPromptTimeoutRef.current = null;
+    }
+  }, []);
+
+  const clearFadeTimers = useCallback(({ resetVolume = false } = {}) => {
     if (fadeTimeoutRef.current) {
       clearTimeout(fadeTimeoutRef.current);
       fadeTimeoutRef.current = null;
@@ -119,7 +142,7 @@ function App() {
     if (resetVolume && audioRef.current) {
       audioRef.current.volume = 1;
     }
-  };
+  }, []);
 
   const startFadeOut = (fadeDurationMs) => {
     const audio = audioRef.current;
@@ -286,34 +309,80 @@ function App() {
   };
 
   // Fetch a new round for the selected style
-  const generateRound = async (style = selectedStyle) => {
-    if (!style) {
-      console.warn("No style selected yet.");
+  const generateRound = useCallback(
+    async (styleParam = null) => {
+      const style = styleParam ?? selectedStyle;
+
+      if (!style) {
+        console.warn("No style selected yet.");
+        return;
+      }
+
+      if (!ENABLED_STYLE_IDS.has(style)) {
+        console.warn(`Round generation for ${style} not wired up yet.`);
+        return;
+      }
+
+      if (isUnauthenticated) {
+        pendingRoundStyleRef.current = style;
+        authPromptReasonRef.current = "round-generation";
+        setRoundAuthBlocked(true);
+        setRound([]);
+        return;
+      }
+
+      try {
+        const res = await fetchWithOrigin(`/api/round?style=${encodeURIComponent(style)}`, {
+          credentials: "include",
+        });
+        const data = await res.json();
+
+        if (res.status === 401) {
+          pendingRoundStyleRef.current = style;
+          authPromptReasonRef.current = "round-generation";
+          setRoundAuthBlocked(true);
+          setRound([]);
+          return;
+        }
+
+        if (!res.ok) {
+          throw new Error(data?.error ?? "Failed to load round");
+        }
+
+        pendingRoundStyleRef.current = null;
+        clearBreakInterval();
+        clearPlayTimeout();
+        setRoundAuthBlocked(false);
+        setRound(data);
+        setCurrentIndex(null);
+        setBreakTimeLeft(null);
+        setIsPlaying(false);
+        setCurrentTime(0);
+        setDuration(0);
+        setUpcomingIndex(null);
+        advancingRef.current = false;
+      } catch (error) {
+        console.error("Error fetching round:", error);
+      }
+    },
+    [clearBreakInterval, clearPlayTimeout, isUnauthenticated, selectedStyle]
+  );
+
+  useEffect(() => {
+    if (!isAuthenticated) {
       return;
     }
 
-    if (!ENABLED_STYLE_IDS.has(style)) {
-      console.warn(`Round generation for ${style} not wired up yet.`);
-      return;
-    }
+    clearAuthPromptTimeout();
+    setShowAuthModal(false);
+    setRoundAuthBlocked(false);
 
-    try {
-      const res = await fetch(`/api/round?style=${encodeURIComponent(style)}`);
-      const data = await res.json();
-      clearBreakInterval();
-      clearPlayTimeout();
-      setRound(data);
-      setCurrentIndex(null);
-      setBreakTimeLeft(null);
-      setIsPlaying(false);
-      setCurrentTime(0);
-      setDuration(0);
-      setUpcomingIndex(null);
-      advancingRef.current = false;
-    } catch (e) {
-      console.error("Error fetching round:", e);
+    if (pendingRoundStyleRef.current) {
+      const styleToGenerate = pendingRoundStyleRef.current;
+      pendingRoundStyleRef.current = null;
+      generateRound(styleToGenerate);
     }
-  };
+  }, [clearAuthPromptTimeout, generateRound, isAuthenticated]);
 
   const handleEnded = () => {
     clearPlayTimeout();
@@ -344,6 +413,14 @@ function App() {
     setCurrentTime(event.target.currentTime || 0);
   };
 
+  const handleProviderLogin = async (providerKey) => {
+    try {
+      await login(providerKey);
+    } catch {
+      // Error is surfaced through auth context; suppress to avoid console noise
+    }
+  };
+
   const handleSelectStyle = (styleId) => {
     if (styleId === selectedStyle) {
       return;
@@ -355,23 +432,25 @@ function App() {
     setPracticeDances([]);
     setPracticeError(null);
     setPracticeDancesLoading(false);
+    setRoundAuthBlocked(false);
+    setSelectedMode(null);
+    clearAuthPromptTimeout();
     setSelectedStyle(styleId);
 
     if (!ENABLED_STYLE_IDS.has(styleId)) {
       return;
-    }
-
-    if (selectedMode === "round") {
-      generateRound(styleId);
     }
   };
 
   const handleModeChange = (modeId) => {
     if (modeId === selectedMode) return;
 
+    clearAuthPromptTimeout();
+
     if (modeId === "practice") {
       stopRoundPlayback();
       setRound([]);
+      setRoundAuthBlocked(false);
     } else {
       resetPracticeState();
       setPracticeDancesLoading(false);
@@ -381,17 +460,25 @@ function App() {
 
     setSelectedMode(modeId);
 
-    if (
-      modeId === "round" &&
-      selectedStyle &&
-      ENABLED_STYLE_IDS.has(selectedStyle) &&
-      round.length === 0
-    ) {
-      generateRound(selectedStyle);
+    if (modeId === "round") {
+      setRoundAuthBlocked(false);
+
+      if (selectedStyle && ENABLED_STYLE_IDS.has(selectedStyle)) {
+        generateRound(selectedStyle);
+      }
     }
   };
 
-  const handlePracticeRequest = async (danceId, { forceReload = false } = {}) => {
+  const handlePracticeRequest = async (
+    danceId,
+    { forceReload = false } = {}
+  ) => {
+    if (isUnauthenticated) {
+      clearAuthError();
+      setShowAuthModal(true);
+      return;
+    }
+
     if (!selectedStyle || !ENABLED_STYLE_IDS.has(selectedStyle)) return;
 
     if (
@@ -407,12 +494,21 @@ function App() {
     setPracticeIsPlaying(false);
 
     try {
-      const res = await fetch(
+      const res = await fetchWithOrigin(
         `/api/practice?style=${encodeURIComponent(
           selectedStyle
-        )}&dance=${encodeURIComponent(danceId)}`
+        )}&dance=${encodeURIComponent(danceId)}`,
+        { credentials: "include" }
       );
       const payload = await res.json();
+
+      if (res.status === 401) {
+        clearAuthError();
+        setShowAuthModal(true);
+        setPracticeLoadingDance(null);
+        setPracticeError(null);
+        return;
+      }
 
       if (!res.ok) {
         throw new Error(payload.error ?? "Failed to load practice track");
@@ -484,7 +580,39 @@ function App() {
   };
 
   const handleTogglePlayback = () => {
-    if (round.length === 0) return;
+    if (isUnauthenticated) {
+      authPromptReasonRef.current = "round-start";
+      clearAuthPromptTimeout();
+      clearAuthError();
+
+      if (currentIndex === null) {
+        primeAudioActivation()
+          .catch(() => {})
+          .finally(() => {
+            startBreakThenNext();
+          });
+      }
+
+      authPromptTimeoutRef.current = setTimeout(() => {
+        setShowAuthModal(true);
+        clearAuthError();
+        authPromptTimeoutRef.current = null;
+      }, 3000);
+      return;
+    }
+
+    if (round.length === 0) {
+      return;
+    }
+
+    if (roundAuthBlocked || pendingRoundStyleRef.current) {
+      if (selectedStyle && ENABLED_STYLE_IDS.has(selectedStyle)) {
+        generateRound(selectedStyle);
+      }
+      return;
+    }
+
+    clearAuthPromptTimeout();
 
     if (isPlaying) {
       if (audioRef.current) {
@@ -537,8 +665,9 @@ function App() {
 
     const loadPracticeDances = async () => {
       try {
-        const res = await fetch(
-          `/api/dances?style=${encodeURIComponent(selectedStyle)}`
+        const res = await fetchWithOrigin(
+          `/api/dances?style=${encodeURIComponent(selectedStyle)}`,
+          { credentials: "include" }
         );
         const payload = await res.json();
 
@@ -632,7 +761,7 @@ function App() {
     setIsPlaying(false);
     clearPlayTimeout();
     clearFadeTimers({ resetVolume: true });
-  }, [currentIndex, round]);
+  }, [currentIndex, round, clearPlayTimeout, clearFadeTimers]);
 
   useEffect(() => {
     const previousBackground = document.body.style.backgroundColor;
@@ -651,8 +780,9 @@ function App() {
       clearPlayTimeout();
       clearBreakInterval();
       clearFadeTimers({ resetVolume: true });
+      clearAuthPromptTimeout();
     },
-    []
+    [clearAuthPromptTimeout, clearBreakInterval, clearPlayTimeout, clearFadeTimers]
   );
 
   const effectiveDuration = duration
@@ -740,6 +870,17 @@ function App() {
 
   return (
     <>
+      <AuthModal
+        isOpen={showAuthModal}
+        onClose={() => {
+          setShowAuthModal(false);
+          clearAuthError();
+        }}
+        onSelectProvider={handleProviderLogin}
+        isProcessing={isProcessingLogin}
+        error={authError}
+        onRetry={() => clearAuthError()}
+      />
       <h1 className="app-title app-title-floating">Ballroom DJ</h1>
 
       <div className="app-root">
@@ -773,7 +914,7 @@ function App() {
                 <button
                   key={mode.id}
                   type="button"
-                  className={`neomorphus-button${
+                  className={`neomorphus-button mode-button${
                     selectedMode === mode.id ? " active" : ""
                   }`}
                   onClick={() => handleModeChange(mode.id)}
@@ -826,7 +967,7 @@ function App() {
                               : undefined,
                         }}
                       >
-                        {s.dance}: {getDisplayName(s.file)}
+                        {getDisplayName(s.file)}
                       </li>
                     ))}
                   </ul>
@@ -840,6 +981,34 @@ function App() {
                     </button>
                   )}
                 </div>
+                {durationControls}
+              </div>
+            ) : roundAuthBlocked ? (
+              <div
+                style={{
+                  marginTop: "1.25rem",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "flex-start",
+                  gap: "1rem",
+                }}
+              >
+                {round.length > 0 ? (
+                  <ul style={{ margin: 0, paddingLeft: "1.25rem" }}>
+                    {round.map((s, i) => (
+                      <li key={i}>
+                        {getDisplayName(s.file)}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p style={{ color: "#b5bac6", margin: 0 }}>
+                    Sign in to start this round.
+                  </p>
+                )}
+                <button onClick={handleTogglePlayback} className="neomorphus-button">
+                  Start Round
+                </button>
                 {durationControls}
               </div>
             ) : (
