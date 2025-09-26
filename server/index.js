@@ -232,7 +232,7 @@ app.get("/api/hello", (req, res) => {
   res.json({ message: "Hello from the backend 👋" });
 });
 
-app.get("/api/round", requireAuth, async (req, res) => {
+app.get("/api/round", async (req, res) => {
   try {
     const requestedStyle = (req.query.style || "ballroom").toLowerCase();
     const config = STYLE_CONFIG[requestedStyle];
