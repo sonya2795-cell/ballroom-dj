@@ -44,6 +44,8 @@ function App() {
     authError,
     clearAuthError,
     isProcessingLogin,
+    user,
+    logout,
   } = useAuth();
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [round, setRound] = useState([]);
@@ -323,25 +325,21 @@ function App() {
         return;
       }
 
-      if (isUnauthenticated) {
-        pendingRoundStyleRef.current = style;
-        authPromptReasonRef.current = "round-generation";
-        setRoundAuthBlocked(true);
-        setRound([]);
-        return;
-      }
-
       try {
+        console.debug("[round] fetching round", style);
         const res = await fetchWithOrigin(`/api/round?style=${encodeURIComponent(style)}`, {
           credentials: "include",
         });
         const data = await res.json();
 
         if (res.status === 401) {
+          console.debug("[round] fetch 401", {
+            style,
+            existingRoundLength: round.length,
+          });
           pendingRoundStyleRef.current = style;
           authPromptReasonRef.current = "round-generation";
           setRoundAuthBlocked(true);
-          setRound([]);
           return;
         }
 
@@ -353,6 +351,10 @@ function App() {
         clearBreakInterval();
         clearPlayTimeout();
         setRoundAuthBlocked(false);
+        console.debug("[round] fetch success", {
+          style,
+          trackCount: Array.isArray(data) ? data.length : "n/a",
+        });
         setRound(data);
         setCurrentIndex(null);
         setBreakTimeLeft(null);
@@ -365,14 +367,16 @@ function App() {
         console.error("Error fetching round:", error);
       }
     },
-    [clearBreakInterval, clearPlayTimeout, isUnauthenticated, selectedStyle]
+    [clearBreakInterval, clearPlayTimeout, round.length, selectedStyle]
   );
 
   useEffect(() => {
     if (!isAuthenticated) {
+      console.debug("[auth] user not authenticated");
       return;
     }
 
+    console.debug("[auth] user authenticated", user?.uid);
     clearAuthPromptTimeout();
     setShowAuthModal(false);
     setRoundAuthBlocked(false);
@@ -380,9 +384,10 @@ function App() {
     if (pendingRoundStyleRef.current) {
       const styleToGenerate = pendingRoundStyleRef.current;
       pendingRoundStyleRef.current = null;
+      console.debug("[auth] replaying pending round", styleToGenerate);
       generateRound(styleToGenerate);
     }
-  }, [clearAuthPromptTimeout, generateRound, isAuthenticated]);
+  }, [clearAuthPromptTimeout, generateRound, isAuthenticated, user?.uid]);
 
   const handleEnded = () => {
     clearPlayTimeout();
@@ -422,6 +427,10 @@ function App() {
   };
 
   const handleSelectStyle = (styleId) => {
+    console.debug("[round] select style", {
+      styleId,
+      previousStyle: selectedStyle,
+    });
     if (styleId === selectedStyle) {
       return;
     }
@@ -443,6 +452,11 @@ function App() {
   };
 
   const handleModeChange = (modeId) => {
+    console.debug("[round] mode change", {
+      modeId,
+      previousMode: selectedMode,
+      selectedStyle,
+    });
     if (modeId === selectedMode) return;
 
     clearAuthPromptTimeout();
@@ -467,6 +481,15 @@ function App() {
         generateRound(selectedStyle);
       }
     }
+  };
+
+  const handleSignOut = async () => {
+    console.debug("[auth] sign out requested");
+    clearAuthPromptTimeout();
+    await logout();
+    console.debug("[auth] sign out complete, round length", round.length);
+    stopRoundPlayback();
+    setRoundAuthBlocked(false);
   };
 
   const handlePracticeRequest = async (
@@ -581,23 +604,12 @@ function App() {
 
   const handleTogglePlayback = () => {
     if (isUnauthenticated) {
+      console.debug("[round] unauthenticated start, showing prompt");
       authPromptReasonRef.current = "round-start";
       clearAuthPromptTimeout();
       clearAuthError();
-
-      if (currentIndex === null) {
-        primeAudioActivation()
-          .catch(() => {})
-          .finally(() => {
-            startBreakThenNext();
-          });
-      }
-
-      authPromptTimeoutRef.current = setTimeout(() => {
-        setShowAuthModal(true);
-        clearAuthError();
-        authPromptTimeoutRef.current = null;
-      }, 3000);
+      setIsPlaying(false);
+      setShowAuthModal(true);
       return;
     }
 
@@ -606,6 +618,10 @@ function App() {
     }
 
     if (roundAuthBlocked || pendingRoundStyleRef.current) {
+      console.debug("[round] start requested while blocked", {
+        roundAuthBlocked,
+        hasPending: Boolean(pendingRoundStyleRef.current),
+      });
       if (selectedStyle && ENABLED_STYLE_IDS.has(selectedStyle)) {
         generateRound(selectedStyle);
       }
@@ -697,6 +713,17 @@ function App() {
       cancelled = true;
     };
   }, [selectedMode, selectedStyle]);
+
+  useEffect(() => {
+    console.debug("[round] state change", {
+      length: round.length,
+      sample: round[0]?.file ?? null,
+    });
+  }, [round]);
+
+  useEffect(() => {
+    console.debug("[round] auth block flag", roundAuthBlocked);
+  }, [roundAuthBlocked]);
 
   useEffect(() => {
     if (!practiceAudioRef.current) return;
@@ -881,6 +908,20 @@ function App() {
         error={authError}
         onRetry={() => clearAuthError()}
       />
+      {isAuthenticated && (
+        <div className="auth-status-bar">
+          <span className="auth-status-text">
+            Signed in{user?.email ? ` as ${user.email}` : ""}
+          </span>
+          <button
+            type="button"
+            className="neomorphus-button sign-out-button"
+            onClick={handleSignOut}
+          >
+            Sign Out
+          </button>
+        </div>
+      )}
       <h1 className="app-title app-title-floating">Ballroom DJ</h1>
 
       <div className="app-root">
