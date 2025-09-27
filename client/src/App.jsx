@@ -436,18 +436,20 @@ function App() {
     }
 
     stopRoundPlayback();
-    resetPracticeState();
-    setRound([]);
-    setPracticeDances([]);
-    setPracticeError(null);
-    setPracticeDancesLoading(false);
-    setRoundAuthBlocked(false);
-    setSelectedMode(null);
     clearAuthPromptTimeout();
     setSelectedStyle(styleId);
 
     if (!ENABLED_STYLE_IDS.has(styleId)) {
       return;
+    }
+
+    if (selectedMode === "round") {
+      generateRound(styleId);
+    } else if (selectedMode === "practice") {
+      resetPracticeState();
+      setPracticeDances([]);
+      setPracticeError(null);
+      setPracticeDancesLoading(true);
     }
   };
 
@@ -490,6 +492,11 @@ function App() {
     console.debug("[auth] sign out complete, round length", round.length);
     stopRoundPlayback();
     setRoundAuthBlocked(false);
+  };
+
+  const handleShowSignIn = () => {
+    clearAuthError();
+    setShowAuthModal(true);
   };
 
   const handlePracticeRequest = async (
@@ -908,7 +915,7 @@ function App() {
         error={authError}
         onRetry={() => clearAuthError()}
       />
-      {isAuthenticated && (
+      {isAuthenticated ? (
         <div className="auth-status-bar">
           <span className="auth-status-text">
             Signed in{user?.email ? ` as ${user.email}` : ""}
@@ -919,6 +926,16 @@ function App() {
             onClick={handleSignOut}
           >
             Sign Out
+          </button>
+        </div>
+      ) : (
+        <div className="auth-status-bar">
+          <button
+            type="button"
+            className="neomorphus-button sign-in-button"
+            onClick={handleShowSignIn}
+          >
+            Sign In
           </button>
         </div>
       )}

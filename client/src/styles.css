@@ -371,7 +371,8 @@ textarea {
   color: #c8cdd8;
 }
 
-.sign-out-button {
+.sign-out-button,
+.sign-in-button {
   padding: 0.35rem 0.85rem;
   font-size: 0.8rem;
 }
