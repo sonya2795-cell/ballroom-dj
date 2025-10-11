@@ -443,7 +443,7 @@ app.get("/api/dances", (req, res) => {
   res.json(config.dances.map(({ folder, label }) => ({ id: folder, label })));
 });
 
-app.get("/api/practice", requireAuth, async (req, res) => {
+app.get("/api/practice", async (req, res) => {
   try {
     const requestedStyle = (req.query.style || "ballroom").toLowerCase();
     const requestedDance = req.query.dance;
