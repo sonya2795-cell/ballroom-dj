@@ -44,6 +44,10 @@ const SONG_MIN_SECONDS = 60;
 const SONG_MAX_SECONDS = 180;
 const SONG_STEP_SECONDS = 5;
 const DEFAULT_SONG_SECONDS = 90;
+const SPEED_MIN_PERCENT = 50;
+const SPEED_MAX_PERCENT = 120;
+const SPEED_STEP_PERCENT = 5;
+const DEFAULT_SPEED_PERCENT = 100;
 const ACTIVE_FONT_SIZE = "1.5rem";
 const UPCOMING_FONT_SIZE = "1.25rem";
 const BACKGROUND_COLOR = "#30333a";
@@ -254,12 +258,17 @@ function Player() {
   const [roundAuthBlocked, setRoundAuthBlocked] = useState(false);
   const [activeBreakTotalSeconds, setActiveBreakTotalSeconds] = useState(null);
   const [roundHeatMode, setRoundHeatMode] = useState(DEFAULT_HEAT_MODE);
+  const [playbackSpeedPercent, setPlaybackSpeedPercent] = useState(DEFAULT_SPEED_PERCENT);
 
   const roundRepeatCount = ROUND_HEAT_REPEAT_MAP[roundHeatMode] ?? 1;
   const round = useMemo(
     () => buildExpandedRound(roundSource, roundRepeatCount),
     [roundSource, roundRepeatCount]
   );
+  const playbackRate = useMemo(() => {
+    const clampedPercent = Math.min(Math.max(playbackSpeedPercent, SPEED_MIN_PERCENT), SPEED_MAX_PERCENT);
+    return clampedPercent / 100;
+  }, [playbackSpeedPercent]);
   const audioRef = useRef(null);
   const playTimeoutRef = useRef(null);
   const fadeTimeoutRef = useRef(null);
@@ -687,7 +696,10 @@ function Player() {
 
   const handlePlay = () => {
     clearFadeTimers({ resetVolume: true });
-    if (audioRef.current) audioRef.current.volume = 1.0;
+    if (audioRef.current) {
+      audioRef.current.volume = 1.0;
+      audioRef.current.playbackRate = playbackRate;
+    }
     setBreakTimeLeft(null);
     setIsPlaying(true);
     schedulePlayTimeout();
@@ -720,6 +732,7 @@ function Player() {
 
   const handleLoadedMetadata = (event) => {
     const audio = event.target;
+    audio.playbackRate = playbackRate;
     const song = currentIndex !== null ? round[currentIndex] : null;
     const clipStartSeconds = getClipStartSeconds(song);
     if (clipStartSeconds > 0 && audio.duration && clipStartSeconds < audio.duration) {
@@ -1175,6 +1188,7 @@ function Player() {
     }
 
     practiceAudioRef.current.load();
+    practiceAudioRef.current.playbackRate = playbackRate;
 
     if (isAuthenticated) {
       practiceAudioRef.current
@@ -1208,6 +1222,7 @@ function Player() {
 
   const handlePracticeLoadedMetadata = (event) => {
     const audio = event.target;
+    audio.playbackRate = playbackRate;
     const track = practicePlaylist?.tracks?.[practiceTrackIndex] ?? null;
     const clipStartSeconds = getClipStartSeconds(track);
     if (clipStartSeconds > 0 && audio.duration && clipStartSeconds < audio.duration) {
@@ -1242,6 +1257,7 @@ function Player() {
     }
 
     if (audio.paused) {
+      audio.playbackRate = playbackRate;
       audio
         .play()
         .catch((err) => console.error("Practice play error:", err));
@@ -1282,11 +1298,24 @@ function Player() {
     const track = practicePlaylist?.tracks?.[practiceTrackIndex] ?? null;
     const clipStartSeconds = getClipStartSeconds(track);
     audio.currentTime = clipStartSeconds;
+    audio.playbackRate = playbackRate;
     audio
       .play()
       .then(() => setPracticeIsPlaying(true))
       .catch((err) => console.error("Practice restart error:", err));
   };
+
+  useEffect(() => {
+    const roundAudio = audioRef.current;
+    if (roundAudio) {
+      roundAudio.playbackRate = playbackRate;
+    }
+
+    const practiceAudio = practiceAudioRef.current;
+    if (practiceAudio) {
+      practiceAudio.playbackRate = playbackRate;
+    }
+  }, [playbackRate]);
 
   useEffect(() => {
     // Reset playback indicators whenever we load a new track
@@ -1479,11 +1508,11 @@ function Player() {
       ? (
           <>
             {practiceQueuePreviewMarkup}
-            <div className="audio-control-container">
-              <div className="playback-progress-row">
-                <span className="playback-time playback-time-elapsed">
-                  {formatTime(practiceEffectiveCurrentTime)}
-                </span>
+              <div className="audio-control-container">
+                <div className="playback-progress-row">
+                  <span className="playback-time playback-time-elapsed">
+                    {formatTime(practiceEffectiveCurrentTime)}
+                  </span>
                 <div className="round-progress-shell playback-progress-shell">
                   <div className="round-progress-wrapper">
                     <progress
@@ -1782,6 +1811,36 @@ function Player() {
               if (isPlaying) {
                 schedulePlayTimeout(nextValue);
               }
+            }}
+          />
+        </div>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            width: "100%",
+            gap: "0.75rem",
+            marginBottom: "1.5rem",
+          }}
+        >
+          <label htmlFor="playback-speed-slider">Speed: {playbackSpeedPercent}%</label>
+          <input
+            id="playback-speed-slider"
+            type="range"
+            min={SPEED_MIN_PERCENT}
+            max={SPEED_MAX_PERCENT}
+            step={SPEED_STEP_PERCENT}
+            value={playbackSpeedPercent}
+            className="neomorphus-slider"
+            onChange={(e) => {
+              const nextValue = Number(e.target.value);
+              if (!Number.isFinite(nextValue)) {
+                return;
+              }
+              setPlaybackSpeedPercent(
+                Math.min(Math.max(nextValue, SPEED_MIN_PERCENT), SPEED_MAX_PERCENT),
+              );
             }}
           />
         </div>
