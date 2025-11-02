@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import AuthModal from "./components/AuthModal.jsx";
 import { useAuth } from "./context/AuthContext.jsx";
 import { fetchWithOrigin } from "./utils/apiClient.js";
@@ -30,6 +30,10 @@ const SONG_MIN_SECONDS = 60;
 const SONG_MAX_SECONDS = 180;
 const SONG_STEP_SECONDS = 5;
 const DEFAULT_SONG_SECONDS = 90;
+const SPEED_MIN_PERCENT = 50;
+const SPEED_MAX_PERCENT = 120;
+const SPEED_STEP_PERCENT = 5;
+const DEFAULT_SPEED_PERCENT = 100;
 const ACTIVE_FONT_SIZE = "1.5rem";
 const UPCOMING_FONT_SIZE = "1.25rem";
 const BACKGROUND_COLOR = "#30333a";
@@ -54,6 +58,8 @@ function App() {
   const [upcomingIndex, setUpcomingIndex] = useState(null);
   const [selectedStyle, setSelectedStyle] = useState(null);
   const [selectedMode, setSelectedMode] = useState(null);
+  const [showWelcomeModal, setShowWelcomeModal] = useState(true);
+  const [showModeModal, setShowModeModal] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -73,6 +79,26 @@ function App() {
   const [practiceCurrentTime, setPracticeCurrentTime] = useState(0);
   const [practiceDuration, setPracticeDuration] = useState(0);
   const [roundAuthBlocked, setRoundAuthBlocked] = useState(false);
+  const [roundPlaybackSpeedPercent, setRoundPlaybackSpeedPercent] = useState(
+    DEFAULT_SPEED_PERCENT,
+  );
+  const [practicePlaybackSpeedPercent, setPracticePlaybackSpeedPercent] = useState(
+    DEFAULT_SPEED_PERCENT,
+  );
+  const roundPlaybackRate = useMemo(() => {
+    const clampedPercent = Math.min(
+      Math.max(roundPlaybackSpeedPercent, SPEED_MIN_PERCENT),
+      SPEED_MAX_PERCENT,
+    );
+    return clampedPercent / 100;
+  }, [roundPlaybackSpeedPercent]);
+  const practicePlaybackRate = useMemo(() => {
+    const clampedPercent = Math.min(
+      Math.max(practicePlaybackSpeedPercent, SPEED_MIN_PERCENT),
+      SPEED_MAX_PERCENT,
+    );
+    return clampedPercent / 100;
+  }, [practicePlaybackSpeedPercent]);
   const audioRef = useRef(null);
   const playTimeoutRef = useRef(null);
   const fadeTimeoutRef = useRef(null);
@@ -266,6 +292,23 @@ function App() {
     return null;
   };
 
+  const getPreviousIndex = () => {
+    if (round.length === 0) return null;
+
+    const effectiveIndex =
+      currentIndex !== null
+        ? currentIndex
+        : upcomingIndex !== null
+        ? upcomingIndex
+        : null;
+
+    if (effectiveIndex === null || effectiveIndex <= 0) {
+      return null;
+    }
+
+    return effectiveIndex - 1;
+  };
+
   const startBreakThenNext = () => {
     if (advancingRef.current) return;
 
@@ -397,7 +440,10 @@ function App() {
 
   const handlePlay = () => {
     clearFadeTimers({ resetVolume: true });
-    if (audioRef.current) audioRef.current.volume = 1.0;
+    if (audioRef.current) {
+      audioRef.current.volume = 1.0;
+      audioRef.current.playbackRate = roundPlaybackRate;
+    }
     setBreakTimeLeft(null);
     setIsPlaying(true);
     schedulePlayTimeout();
@@ -414,6 +460,7 @@ function App() {
   };
 
   const handleLoadedMetadata = (event) => {
+    event.target.playbackRate = roundPlaybackRate;
     setDuration(event.target.duration || 0);
     setCurrentTime(event.target.currentTime || 0);
   };
@@ -454,6 +501,7 @@ function App() {
   };
 
   const handleModeChange = (modeId) => {
+    setShowModeModal(false);
     console.debug("[round] mode change", {
       modeId,
       previousMode: selectedMode,
@@ -595,18 +643,47 @@ function App() {
   };
 
   const handleSkip = () => {
-    if (currentIndex === null) return;
+    const nextIndex = getNextIndex();
+    if (nextIndex === null) return;
 
     if (audioRef.current) {
       audioRef.current.pause();
-      audioRef.current.currentTime = audioRef.current.duration || 0;
+      audioRef.current.currentTime = 0;
     }
 
-    setIsPlaying(false);
     clearPlayTimeout();
+    clearBreakInterval();
     clearFadeTimers({ resetVolume: true });
 
-    startBreakThenNext();
+    advancingRef.current = false;
+    setBreakTimeLeft(null);
+    setUpcomingIndex(null);
+    setIsPlaying(false);
+    setCurrentIndex(nextIndex);
+    setCurrentTime(0);
+    setDuration(0);
+  };
+
+  const handlePrevious = () => {
+    const previousIndex = getPreviousIndex();
+    if (previousIndex === null) return;
+
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+
+    clearPlayTimeout();
+    clearBreakInterval();
+    clearFadeTimers({ resetVolume: true });
+
+    advancingRef.current = false;
+    setBreakTimeLeft(null);
+    setUpcomingIndex(null);
+    setIsPlaying(false);
+    setCurrentIndex(previousIndex);
+    setCurrentTime(0);
+    setDuration(0);
   };
 
   const handleTogglePlayback = () => {
@@ -636,6 +713,37 @@ function App() {
     }
 
     clearAuthPromptTimeout();
+
+    if (breakTimeLeft !== null) {
+      const targetIndex =
+        upcomingIndex !== null ? upcomingIndex : getNextIndex();
+
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      }
+
+      clearPlayTimeout();
+      clearBreakInterval();
+      clearFadeTimers({ resetVolume: true });
+      advancingRef.current = false;
+
+      setBreakTimeLeft(null);
+      setUpcomingIndex(null);
+      setIsPlaying(false);
+
+      if (targetIndex !== null) {
+        setCurrentIndex(targetIndex);
+        setCurrentTime(0);
+        setDuration(0);
+      } else {
+        setCurrentIndex(null);
+        setCurrentTime(0);
+        setDuration(0);
+      }
+
+      return;
+    }
 
     if (isPlaying) {
       if (audioRef.current) {
@@ -756,6 +864,7 @@ function App() {
 
     practiceAudioRef.current.load();
     practiceAudioRef.current.currentTime = 0;
+    practiceAudioRef.current.playbackRate = practicePlaybackRate;
     practiceAudioRef.current
       .play()
       .catch((err) => {
@@ -764,22 +873,54 @@ function App() {
       });
     setPracticeCurrentTime(0);
     setPracticeDuration(0);
-  }, [practicePlaylist, practiceTrackIndex]);
+  }, [practicePlaylist, practiceTrackIndex, practicePlaybackRate]);
+
+  useEffect(() => {
+    if (selectedStyle && showWelcomeModal) {
+      setShowWelcomeModal(false);
+    }
+  }, [selectedStyle, showWelcomeModal]);
+
+  useEffect(() => {
+    if (selectedStyle && selectedMode === null && !showWelcomeModal) {
+      setShowModeModal(true);
+    }
+  }, [selectedStyle, selectedMode, showWelcomeModal]);
 
   const handlePracticeTimeUpdate = (event) => {
     setPracticeCurrentTime(event.target.currentTime || 0);
   };
 
   const handlePracticeLoadedMetadata = (event) => {
+    event.target.playbackRate = practicePlaybackRate;
     setPracticeDuration(event.target.duration || 0);
     setPracticeCurrentTime(event.target.currentTime || 0);
   };
+
+  const renderOnboardingIndicators = (activeStep) => (
+    <div
+      className={`welcome-modal-indicators step-${activeStep}`}
+      role="img"
+      aria-label={`Step ${activeStep} of 2`}
+    >
+      {[1, 2].map((step) => (
+        <div key={step} className="welcome-modal-indicator-slot">
+          <span
+            className={`welcome-modal-indicator${step === activeStep ? " active" : ""}`}
+            aria-hidden="true"
+          />
+          <span className="welcome-modal-indicator-label">{`Step ${step}`}</span>
+        </div>
+      ))}
+    </div>
+  );
 
   const handlePracticeToggle = () => {
     const audio = practiceAudioRef.current;
     if (!audio) return;
 
     if (audio.paused) {
+      audio.playbackRate = practicePlaybackRate;
       audio
         .play()
         .catch((err) => console.error("Practice play error:", err));
@@ -787,6 +928,20 @@ function App() {
       audio.pause();
     }
   };
+
+  useEffect(() => {
+    const roundAudio = audioRef.current;
+    if (roundAudio) {
+      roundAudio.playbackRate = roundPlaybackRate;
+    }
+  }, [roundPlaybackRate]);
+
+  useEffect(() => {
+    const practiceAudio = practiceAudioRef.current;
+    if (practiceAudio) {
+      practiceAudio.playbackRate = practicePlaybackRate;
+    }
+  }, [practicePlaybackRate]);
 
   useEffect(() => {
     // Reset playback indicators whenever we load a new track
@@ -853,6 +1008,30 @@ function App() {
     ),
   );
 
+  const previousIndexCandidate = getPreviousIndex();
+  const nextIndexCandidate = getNextIndex();
+  const canGoPrevious = previousIndexCandidate !== null;
+  const canGoNext = nextIndexCandidate !== null;
+  const startButtonLabel = isPlaying
+    ? "Pause Round"
+    : breakTimeLeft !== null
+    ? "Resume Round"
+    : currentIndex === null
+    ? "Start Round"
+    : "Play Round";
+  const startButtonIcon = isPlaying
+    ? "⏸️"
+    : breakTimeLeft !== null
+    ? "⏯️"
+    : "▶️";
+  const startButtonAriaLabel = isPlaying
+    ? "Pause round playback"
+    : breakTimeLeft !== null
+    ? "Resume round playback"
+    : "Start round playback";
+  const isStartDisabled =
+    round.length === 0 && !roundAuthBlocked && !pendingRoundStyleRef.current;
+
   const durationControls =
     selectedStyle !== null ? (
       <div
@@ -899,11 +1078,238 @@ function App() {
             }}
           />
         </div>
+        <div>
+          <label htmlFor="round-playback-speed-slider">
+            Speed: {roundPlaybackSpeedPercent}%
+          </label>
+          <input
+            id="round-playback-speed-slider"
+            type="range"
+            min={SPEED_MIN_PERCENT}
+            max={SPEED_MAX_PERCENT}
+            step={SPEED_STEP_PERCENT}
+            value={roundPlaybackSpeedPercent}
+            className="neomorphus-slider"
+            onChange={(e) => {
+              const nextValue = Number(e.target.value);
+              if (!Number.isFinite(nextValue)) {
+                return;
+              }
+              setRoundPlaybackSpeedPercent(
+                Math.min(Math.max(nextValue, SPEED_MIN_PERCENT), SPEED_MAX_PERCENT),
+              );
+            }}
+          />
+        </div>
       </div>
     ) : null;
 
+  const nowPlayingLabel = (() => {
+    if (currentIndex !== null && round[currentIndex]?.dance) {
+      return `Now Playing (${currentIndex + 1}/${round.length}): ${round[currentIndex].dance}`;
+    }
+
+    if (breakTimeLeft !== null && upcomingIndex !== null && round[upcomingIndex]?.dance) {
+      return `Up Next (${upcomingIndex + 1}/${round.length}): ${round[upcomingIndex].dance}`;
+    }
+
+    if (round.length > 0) {
+      return `Round Ready (${round.length} song${round.length === 1 ? "" : "s"})`;
+    }
+
+    return "Round not loaded yet";
+  })();
+
+  const roundTransportControls =
+    selectedMode === "round"
+      ? (
+          <div
+            style={{
+              width: "100%",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: "1rem",
+              marginTop: "1.5rem",
+            }}
+          >
+            <div
+              style={{
+                width: "100%",
+                maxWidth: "520px",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: "0.5rem",
+              }}
+            >
+              <div
+                style={{
+                  textAlign: "center",
+                  fontWeight: 600,
+                  width: "100%",
+                  color:
+                    currentIndex !== null && breakTimeLeft === null
+                      ? HIGHLIGHT_COLOR
+                      : TEXT_COLOR,
+                  opacity: round.length === 0 ? 0.75 : 1,
+                }}
+              >
+                {nowPlayingLabel}
+              </div>
+              <div
+                style={{
+                  width: "100%",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.75rem",
+                }}
+              >
+                <span
+                  style={{
+                    minWidth: "3.5rem",
+                    textAlign: "right",
+                    fontSize: "0.75rem",
+                    color: TEXT_COLOR,
+                  }}
+                >
+                  {formatTime(effectiveCurrentTime)}
+                </span>
+                <div className="round-progress-wrapper" style={{ flex: 1 }}>
+                  <progress
+                    value={effectiveCurrentTime}
+                    max={effectiveDuration || 1}
+                    className="round-progress"
+                    style={{ width: "100%" }}
+                  />
+                  <div
+                    className="round-progress-thumb"
+                    style={{ left: `${progressPercent}%` }}
+                  />
+                </div>
+                <span
+                  style={{
+                    minWidth: "3.5rem",
+                    textAlign: "left",
+                    fontSize: "0.75rem",
+                    color: TEXT_COLOR,
+                  }}
+                >
+                  {formatTime(effectiveDuration)}
+                </span>
+              </div>
+            </div>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                gap: "0.75rem",
+                flexWrap: "wrap",
+              }}
+            >
+              <button
+                type="button"
+                className="neomorphus-button round-control"
+                onClick={handlePrevious}
+                disabled={!canGoPrevious}
+                aria-label="Previous Song"
+                title="Previous Song"
+              >
+                ⏮️
+              </button>
+              <button
+                type="button"
+                className="neomorphus-button round-control"
+                onClick={handleTogglePlayback}
+                disabled={isStartDisabled}
+                aria-label={startButtonAriaLabel}
+                title={startButtonLabel}
+              >
+                {startButtonIcon}
+              </button>
+              <button
+                type="button"
+                className="neomorphus-button round-control"
+                onClick={handleSkip}
+                disabled={!canGoNext}
+                aria-label="Next Song"
+                title="Next Song"
+              >
+                ⏭️
+              </button>
+            </div>
+          </div>
+        )
+      : null;
+
   return (
     <>
+      {showWelcomeModal && (
+        <div className="welcome-modal-backdrop">
+          <div
+            className="welcome-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="welcome-modal-title"
+          >
+            <h2 id="welcome-modal-title" className="welcome-modal-title">
+              What would you like
+              <br />
+              to dance today?
+            </h2>
+            {renderOnboardingIndicators(1)}
+            <div className="welcome-modal-buttons">
+              {STYLE_OPTIONS.map((style) => (
+                <button
+                  key={style.id}
+                  type="button"
+                  className={`neomorphus-button welcome-dance-button${
+                    selectedStyle === style.id ? " active" : ""
+                  }`}
+                  onClick={() => {
+                    handleSelectStyle(style.id);
+                    setShowWelcomeModal(false);
+                    setShowModeModal(true);
+                  }}
+                  disabled={!ENABLED_STYLE_IDS.has(style.id)}
+                >
+                  {style.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+      {showModeModal && (
+        <div className="welcome-modal-backdrop">
+        <div
+          className="welcome-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="mode-modal-title"
+        >
+          <h2 id="mode-modal-title" className="welcome-modal-title">
+            What would you like
+            <br />
+            to dance today?
+          </h2>
+          {renderOnboardingIndicators(2)}
+          <div className="welcome-modal-buttons">
+            {MODE_OPTIONS.map((mode) => (
+              <button
+                key={mode.id}
+                type="button"
+                className="neomorphus-button welcome-dance-button"
+                onClick={() => handleModeChange(mode.id)}
+              >
+                {mode.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    )}
       <AuthModal
         isOpen={showAuthModal}
         onClose={() => {
@@ -1030,14 +1436,6 @@ function App() {
                     ))}
                   </ul>
 
-                  {currentIndex === null && breakTimeLeft === null && (
-                    <button
-                      onClick={handleTogglePlayback}
-                      className="neomorphus-button"
-                    >
-                      Start Round
-                    </button>
-                  )}
                 </div>
                 {durationControls}
               </div>
@@ -1064,14 +1462,13 @@ function App() {
                     Sign in to start this round.
                   </p>
                 )}
-                <button onClick={handleTogglePlayback} className="neomorphus-button">
-                  Start Round
-                </button>
                 {durationControls}
               </div>
             ) : (
               <div style={{ marginTop: "1rem" }}>{durationControls}</div>
             ))}
+
+          {roundTransportControls}
 
           {selectedMode === "practice" && selectedStyle && (
             ENABLED_STYLE_IDS.has(selectedStyle) ? (
@@ -1162,6 +1559,32 @@ function App() {
                     />
                     {showPracticeControls && (
                       <div style={{ marginTop: "0.75rem" }}>
+                        <div style={{ marginBottom: "0.75rem" }}>
+                          <label htmlFor="practice-playback-speed-slider">
+                            Speed: {practicePlaybackSpeedPercent}%
+                          </label>
+                          <input
+                            id="practice-playback-speed-slider"
+                            type="range"
+                            min={SPEED_MIN_PERCENT}
+                            max={SPEED_MAX_PERCENT}
+                            step={SPEED_STEP_PERCENT}
+                            value={practicePlaybackSpeedPercent}
+                            className="neomorphus-slider"
+                            onChange={(e) => {
+                              const nextValue = Number(e.target.value);
+                              if (!Number.isFinite(nextValue)) {
+                                return;
+                              }
+                              setPracticePlaybackSpeedPercent(
+                                Math.min(
+                                  Math.max(nextValue, SPEED_MIN_PERCENT),
+                                  SPEED_MAX_PERCENT,
+                                ),
+                              );
+                            }}
+                          />
+                        </div>
                         <button
                           type="button"
                           className="neomorphus-button"
@@ -1271,51 +1694,6 @@ function App() {
 
           {selectedMode === "round" && currentIndex !== null && round[currentIndex]?.file && (
             <div>
-              <p
-                style={{
-                  color: breakTimeLeft === null ? HIGHLIGHT_COLOR : TEXT_COLOR,
-                }}
-              >
-                Now Playing ({currentIndex + 1}/{round.length}):{" "}
-                {round[currentIndex].dance}
-              </p>
-              {breakTimeLeft === null && (
-                <button
-                  onClick={handleSkip}
-                  className="neomorphus-button"
-                  style={{
-                    fontSize: "1.1rem",
-                  }}
-                >
-                  Next Song
-                </button>
-              )}
-              <button
-                onClick={handleTogglePlayback}
-                disabled={breakTimeLeft !== null}
-                className="neomorphus-button"
-                style={{
-                  fontSize: "1.1rem",
-                }}
-              >
-                {isPlaying ? "⏸️" : "▶️"}
-              </button>
-              <div>
-                <div className="round-progress-wrapper">
-                  <progress
-                    value={effectiveCurrentTime}
-                    max={effectiveDuration}
-                    className="round-progress"
-                  />
-                  <div
-                    className="round-progress-thumb"
-                    style={{ left: `${progressPercent}%` }}
-                  />
-                </div>
-                <span>
-                  {formatTime(effectiveCurrentTime)} / {formatTime(effectiveDuration)}
-                </span>
-              </div>
               <audio
                 ref={audioRef}
                 src={round[currentIndex].file}   // 👈 USES full Firebase URL directly
