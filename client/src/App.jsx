@@ -1,13 +1,34 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { Routes, Route, useNavigate } from "react-router-dom";
 import AuthModal from "./components/AuthModal.jsx";
 import { useAuth } from "./context/AuthContext.jsx";
+import AdminLibrary from "./pages/AdminLibrary.jsx";
 import { fetchWithOrigin } from "./utils/apiClient.js";
+import {
+  getCrashOptions,
+  getCrashRelativeDurationSeconds,
+  getCrashSeconds,
+  PASO_DANCE_ID,
+} from "./utils/pasoCrash.js";
 
 const BREAK_MIN_SECONDS = 5;
 const BREAK_MAX_SECONDS = 30;
 const DEFAULT_BREAK_SECONDS = BREAK_MIN_SECONDS;
 const ROUND_FADE_OUT_SECONDS = 5;
 const ROUND_FADE_INTERVAL_MS = 50;
+
+const ROUND_HEAT_OPTIONS = [
+  { id: "final", label: "1 Heat", repeatCount: 1 },
+  { id: "quarterfinal", label: "2 Heats", repeatCount: 2 },
+  { id: "48", label: "3 Heats", repeatCount: 3 },
+];
+
+const DEFAULT_HEAT_MODE = ROUND_HEAT_OPTIONS[0].id;
+
+const ROUND_HEAT_REPEAT_MAP = ROUND_HEAT_OPTIONS.reduce((acc, option) => {
+  acc[option.id] = option.repeatCount;
+  return acc;
+}, {});
 
 const SILENCE_WAV =
   "data:audio/wav;base64,UklGRqQMAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YYAMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==";
@@ -25,6 +46,11 @@ const MODE_OPTIONS = [
 ];
 
 const ENABLED_STYLE_IDS = new Set(["latin", "ballroom", "rhythm", "smooth"]);
+const PASO_CRASH_BUTTON_LABELS = {
+  crash1: "1st crash",
+  crash2: "2nd crash",
+  crash3: "3rd crash",
+};
 
 const SONG_MIN_SECONDS = 60;
 const SONG_MAX_SECONDS = 180;
@@ -40,10 +66,62 @@ const BACKGROUND_COLOR = "#30333a";
 const TEXT_COLOR = "#f2f4f7";
 const HIGHLIGHT_COLOR = "#25ed75";
 
-function App() {
+function buildExpandedRound(songs, repeatCount) {
+  if (!Array.isArray(songs) || repeatCount <= 0) {
+    return [];
+  }
+
+  return songs.flatMap((song, baseIndex) => {
+    const safeRepeatCount = Number.isInteger(repeatCount) ? Math.max(repeatCount, 1) : 1;
+    const baseKey = song?.id ?? song?.filename ?? song?.file ?? baseIndex;
+
+    return Array.from({ length: safeRepeatCount }, (_, repeatIndex) => ({
+      ...song,
+      repeatSlot: repeatIndex + 1,
+      repeatTotal: safeRepeatCount,
+      repeatBaseIndex: baseIndex,
+      repeatQueueKey: `${baseKey}-${repeatIndex + 1}`,
+    }));
+  });
+}
+
+function msToSeconds(ms) {
+  if (typeof ms !== "number" || Number.isNaN(ms)) return null;
+  return ms / 1000;
+}
+
+function getClipStartSeconds(song) {
+  const seconds = msToSeconds(song?.startMs ?? null);
+  return seconds != null && Number.isFinite(seconds) && seconds > 0 ? seconds : 0;
+}
+
+function getClipEndSeconds(song) {
+  const seconds = msToSeconds(song?.endMs ?? null);
+  return seconds != null && Number.isFinite(seconds) && seconds > 0 ? seconds : null;
+}
+
+function getClipDurationSeconds(song) {
+  const endSeconds = getClipEndSeconds(song);
+  const startSeconds = getClipStartSeconds(song);
+  if (endSeconds != null && endSeconds > startSeconds) {
+    return endSeconds - startSeconds;
+  }
+  return null;
+}
+
+function formatTime(timeInSeconds) {
+  if (!Number.isFinite(timeInSeconds)) return "0:00";
+  const totalSeconds = Math.max(0, Math.floor(timeInSeconds));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = String(totalSeconds % 60).padStart(2, "0");
+  return `${minutes}:${seconds}`;
+}
+
+function PlayerApp() {
   const {
     isAuthenticated,
     isUnauthenticated,
+    isAdmin,
     login,
     authError,
     clearAuthError,
@@ -51,8 +129,10 @@ function App() {
     user,
     logout,
   } = useAuth();
+  const navigate = useNavigate();
   const [showAuthModal, setShowAuthModal] = useState(false);
-  const [round, setRound] = useState([]);
+  const [roundSource, setRoundSource] = useState([]);
+  const [roundHeatMode, setRoundHeatMode] = useState(DEFAULT_HEAT_MODE);
   const [currentIndex, setCurrentIndex] = useState(null);
   const [breakTimeLeft, setBreakTimeLeft] = useState(null);
   const [upcomingIndex, setUpcomingIndex] = useState(null);
@@ -78,12 +158,19 @@ function App() {
   const [practiceIsPlaying, setPracticeIsPlaying] = useState(false);
   const [practiceCurrentTime, setPracticeCurrentTime] = useState(0);
   const [practiceDuration, setPracticeDuration] = useState(0);
+  const [selectedCrash, setSelectedCrash] = useState(null);
   const [roundAuthBlocked, setRoundAuthBlocked] = useState(false);
   const [roundPlaybackSpeedPercent, setRoundPlaybackSpeedPercent] = useState(
     DEFAULT_SPEED_PERCENT,
   );
   const [practicePlaybackSpeedPercent, setPracticePlaybackSpeedPercent] = useState(
     DEFAULT_SPEED_PERCENT,
+  );
+  const [isAuthMenuOpen, setIsAuthMenuOpen] = useState(false);
+  const roundRepeatCount = ROUND_HEAT_REPEAT_MAP[roundHeatMode] ?? 1;
+  const round = useMemo(
+    () => buildExpandedRound(roundSource, roundRepeatCount),
+    [roundSource, roundRepeatCount],
   );
   const roundPlaybackRate = useMemo(() => {
     const clampedPercent = Math.min(
@@ -99,6 +186,38 @@ function App() {
     );
     return clampedPercent / 100;
   }, [practicePlaybackSpeedPercent]);
+  const currentPracticeTrack = useMemo(
+    () => practicePlaylist?.tracks?.[practiceTrackIndex] ?? null,
+    [practicePlaylist, practiceTrackIndex],
+  );
+  const currentPracticeDanceId = practicePlaylist?.danceId ?? null;
+  const normalizedPracticeDanceId = currentPracticeDanceId
+    ? currentPracticeDanceId.toLowerCase()
+    : null;
+  const normalizedPracticeLoadingDanceId = practiceLoadingDance
+    ? practiceLoadingDance.toLowerCase()
+    : null;
+  const isPasoPracticeContext =
+    selectedMode === "practice" &&
+    (normalizedPracticeDanceId === PASO_DANCE_ID ||
+      normalizedPracticeLoadingDanceId === PASO_DANCE_ID);
+  const pasoPracticeMetadata = useMemo(
+    () => (isPasoPracticeContext ? currentPracticeTrack ?? null : null),
+    [isPasoPracticeContext, currentPracticeTrack],
+  );
+  const pasoCrashOptions = useMemo(
+    () => (pasoPracticeMetadata ? getCrashOptions(pasoPracticeMetadata) : []),
+    [pasoPracticeMetadata],
+  );
+  const hasPasoCrashMetadata = pasoCrashOptions.length > 0;
+  const getActiveCrashSeconds = useCallback(
+    (song) => getCrashSeconds(song, selectedCrash),
+    [selectedCrash],
+  );
+  const getActiveCrashDurationFromClip = useCallback(
+    (song) => getCrashRelativeDurationSeconds(song, selectedCrash, getClipStartSeconds(song)),
+    [selectedCrash],
+  );
   const audioRef = useRef(null);
   const playTimeoutRef = useRef(null);
   const fadeTimeoutRef = useRef(null);
@@ -107,12 +226,23 @@ function App() {
   const activationAudioRef = useRef(null);
   const hasPrimedAudioRef = useRef(false);
   const practiceAudioRef = useRef(null);
+  const practiceAdvancingRef = useRef(false);
   const pendingRoundStyleRef = useRef(null);
   const authPromptReasonRef = useRef(null);
   const authPromptTimeoutRef = useRef(null);
+  const authMenuContainerRef = useRef(null);
 
   // Prevent duplicate advancing
   const advancingRef = useRef(false);
+
+  const handleToggleAuthMenu = useCallback(() => {
+    setIsAuthMenuOpen((prev) => !prev);
+  }, []);
+
+  const handleOpenAdminLibrary = useCallback(() => {
+    setIsAuthMenuOpen(false);
+    navigate("/admin/library");
+  }, [navigate]);
 
   const primeAudioActivation = async () => {
     if (hasPrimedAudioRef.current) return;
@@ -208,7 +338,36 @@ function App() {
     }, ROUND_FADE_INTERVAL_MS);
   };
 
-  const stopRoundPlayback = () => {
+  useEffect(() => {
+    if (!isAuthMenuOpen) {
+      return undefined;
+    }
+
+    const handleOutsideInteraction = (event) => {
+      if (
+        authMenuContainerRef.current &&
+        !authMenuContainerRef.current.contains(event.target)
+      ) {
+        setIsAuthMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleOutsideInteraction);
+    document.addEventListener("touchstart", handleOutsideInteraction);
+
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideInteraction);
+      document.removeEventListener("touchstart", handleOutsideInteraction);
+    };
+  }, [isAuthMenuOpen]);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setIsAuthMenuOpen(false);
+    }
+  }, [isAuthenticated]);
+
+  const stopRoundPlayback = useCallback(() => {
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
@@ -223,7 +382,7 @@ function App() {
     setUpcomingIndex(null);
     setCurrentTime(0);
     setDuration(0);
-  };
+  }, [clearBreakInterval, clearFadeTimers, clearPlayTimeout]);
 
   const resetPracticeState = () => {
     if (practiceAudioRef.current) {
@@ -378,7 +537,7 @@ function App() {
         if (res.status === 401) {
           console.debug("[round] fetch 401", {
             style,
-            existingRoundLength: round.length,
+            existingRoundLength: roundSource.length,
           });
           pendingRoundStyleRef.current = style;
           authPromptReasonRef.current = "round-generation";
@@ -394,11 +553,12 @@ function App() {
         clearBreakInterval();
         clearPlayTimeout();
         setRoundAuthBlocked(false);
+        const normalizedData = Array.isArray(data) ? data : [];
         console.debug("[round] fetch success", {
           style,
-          trackCount: Array.isArray(data) ? data.length : "n/a",
+          trackCount: normalizedData.length,
         });
-        setRound(data);
+        setRoundSource(normalizedData);
         setCurrentIndex(null);
         setBreakTimeLeft(null);
         setIsPlaying(false);
@@ -410,7 +570,7 @@ function App() {
         console.error("Error fetching round:", error);
       }
     },
-    [clearBreakInterval, clearPlayTimeout, round.length, selectedStyle]
+    [clearBreakInterval, clearPlayTimeout, roundSource.length, selectedStyle]
   );
 
   useEffect(() => {
@@ -513,7 +673,7 @@ function App() {
 
     if (modeId === "practice") {
       stopRoundPlayback();
-      setRound([]);
+      setRoundSource([]);
       setRoundAuthBlocked(false);
     } else {
       resetPracticeState();
@@ -533,9 +693,21 @@ function App() {
     }
   };
 
+  const handleSelectHeatMode = useCallback(
+    (modeId) => {
+      if (!Object.prototype.hasOwnProperty.call(ROUND_HEAT_REPEAT_MAP, modeId)) {
+        return;
+      }
+
+      setRoundHeatMode(modeId);
+    },
+    [setRoundHeatMode],
+  );
+
   const handleSignOut = async () => {
     console.debug("[auth] sign out requested");
     clearAuthPromptTimeout();
+    setIsAuthMenuOpen(false);
     await logout();
     console.debug("[auth] sign out complete, round length", round.length);
     stopRoundPlayback();
@@ -551,6 +723,12 @@ function App() {
     danceId,
     { forceReload = false } = {}
   ) => {
+    console.debug("[practice] request start", {
+      danceId,
+      forceReload,
+      selectedStyle,
+      selectedCrash,
+    });
     if (isUnauthenticated) {
       clearAuthError();
       setShowAuthModal(true);
@@ -564,6 +742,7 @@ function App() {
       practicePlaylist?.danceId &&
       practicePlaylist.danceId.toLowerCase() === danceId.toLowerCase()
     ) {
+      console.debug("[practice] request skipped (already loaded)", { danceId });
       return;
     }
 
@@ -579,6 +758,18 @@ function App() {
         { credentials: "include" }
       );
       const payload = await res.json();
+      console.debug("[practice] request success", {
+        danceId,
+        trackCount: Array.isArray(payload.tracks) ? payload.tracks.length : null,
+        tracks: payload.tracks?.map((track, idx) => ({
+          index: idx,
+          id: track.id ?? track.songId ?? null,
+          filename: track.filename ?? track.title ?? null,
+          crash1Ms: track.crash1Ms ?? null,
+          crash2Ms: track.crash2Ms ?? null,
+          crash3Ms: track.crash3Ms ?? null,
+        })),
+      });
 
       if (res.status === 401) {
         clearAuthError();
@@ -603,6 +794,11 @@ function App() {
       }
 
       setPracticePlaylist({ ...payload, style: selectedStyle });
+      console.debug("[practice] playlist set", {
+        danceId,
+        trackCount: payload.tracks.length,
+        firstTrack: payload.tracks[0] ?? null,
+      });
       setPracticeTrackIndex(0);
       setPracticeIsPlaying(false);
       setPracticeCurrentTime(0);
@@ -618,14 +814,6 @@ function App() {
     } finally {
       setPracticeLoadingDance(null);
     }
-  };
-
-  const formatTime = (timeInSeconds) => {
-    if (!Number.isFinite(timeInSeconds)) return "0:00";
-    const totalSeconds = Math.max(0, Math.floor(timeInSeconds));
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = String(totalSeconds % 60).padStart(2, "0");
-    return `${minutes}:${seconds}`;
   };
 
   const getDisplayName = (fileUrl) => {
@@ -830,6 +1018,13 @@ function App() {
   }, [selectedMode, selectedStyle]);
 
   useEffect(() => {
+    if (round.length === 0) {
+      return;
+    }
+    stopRoundPlayback();
+  }, [round.length, roundHeatMode, stopRoundPlayback]);
+
+  useEffect(() => {
     console.debug("[round] state change", {
       length: round.length,
       sample: round[0]?.file ?? null,
@@ -841,31 +1036,40 @@ function App() {
   }, [roundAuthBlocked]);
 
   useEffect(() => {
-    if (!practiceAudioRef.current) return;
+    if (!isPasoPracticeContext && selectedCrash !== null) {
+      setSelectedCrash(null);
+    }
+  }, [isPasoPracticeContext, selectedCrash]);
 
-    if (!practicePlaylist || !practicePlaylist.tracks?.length) {
-      practiceAudioRef.current.pause();
-      practiceAudioRef.current.currentTime = 0;
+  useEffect(() => {
+    const audio = practiceAudioRef.current;
+    if (!audio) return;
+
+    if (!practicePlaylist || !practicePlaylist.tracks?.length || !currentPracticeTrack) {
+      audio.pause();
+      audio.currentTime = 0;
       setPracticeIsPlaying(false);
       setPracticeCurrentTime(0);
       setPracticeDuration(0);
       return;
     }
 
-    const currentTrack = practicePlaylist.tracks[practiceTrackIndex];
-    if (!currentTrack) {
-      practiceAudioRef.current.pause();
-      practiceAudioRef.current.currentTime = 0;
-      setPracticeIsPlaying(false);
-      setPracticeCurrentTime(0);
-      setPracticeDuration(0);
-      return;
+    audio.pause();
+    audio.load();
+
+    const clipStartSeconds = getClipStartSeconds(currentPracticeTrack);
+    if (clipStartSeconds > 0 && audio.duration && clipStartSeconds < audio.duration) {
+      try {
+        audio.currentTime = clipStartSeconds;
+      } catch (err) {
+        console.warn("Failed to seek practice audio to clip start", err);
+      }
+    } else {
+      audio.currentTime = clipStartSeconds;
     }
 
-    practiceAudioRef.current.load();
-    practiceAudioRef.current.currentTime = 0;
-    practiceAudioRef.current.playbackRate = practicePlaybackRate;
-    practiceAudioRef.current
+    audio.playbackRate = practicePlaybackRate;
+    audio
       .play()
       .catch((err) => {
         console.error("Practice play error:", err);
@@ -873,7 +1077,21 @@ function App() {
       });
     setPracticeCurrentTime(0);
     setPracticeDuration(0);
-  }, [practicePlaylist, practiceTrackIndex, practicePlaybackRate]);
+  }, [practicePlaylist, practiceTrackIndex, currentPracticeTrack, practicePlaybackRate]);
+
+  useEffect(() => {
+    if (!practicePlaylist?.tracks) return;
+    console.debug("[practice] track index updated", {
+      practiceTrackIndex,
+      total: practicePlaylist.tracks.length,
+      track: practicePlaylist.tracks[practiceTrackIndex] ?? null,
+      selectedCrash,
+    });
+  }, [practiceTrackIndex, practicePlaylist, selectedCrash]);
+
+  useEffect(() => {
+    practiceAdvancingRef.current = false;
+  }, [practiceTrackIndex, practicePlaylist, selectedCrash]);
 
   useEffect(() => {
     if (selectedStyle && showWelcomeModal) {
@@ -887,14 +1105,124 @@ function App() {
     }
   }, [selectedStyle, selectedMode, showWelcomeModal]);
 
+  const handlePracticeTrackCompletion = useCallback(() => {
+    if (practiceAdvancingRef.current) {
+      console.debug("[practice] track completion suppressed", {
+        practiceTrackIndex,
+        selectedCrash,
+      });
+      return;
+    }
+    practiceAdvancingRef.current = true;
+    const tracksLength = practicePlaylist?.tracks?.length ?? 0;
+    console.debug("[practice] track completion", {
+      tracksLength,
+      practiceTrackIndex,
+      selectedCrash,
+    });
+    setPracticeIsPlaying(false);
+    setPracticeTrackIndex((prev) => {
+      if (tracksLength === 0) return prev;
+      const nextIndex = prev + 1;
+      if (nextIndex < tracksLength) {
+        console.debug("[practice] advancing to next track", {
+          from: prev,
+          to: nextIndex,
+          total: tracksLength,
+        });
+        return nextIndex;
+      }
+      console.debug("[practice] end of playlist reached", {
+        current: prev,
+        total: tracksLength,
+      });
+      return prev;
+    });
+
+    if (
+      currentPracticeDanceId &&
+      tracksLength > 0 &&
+      practiceTrackIndex >= tracksLength - 1
+    ) {
+      handlePracticeRequest(currentPracticeDanceId, { forceReload: true });
+    } else {
+      setPracticeCurrentTime(0);
+      setPracticeDuration(0);
+    }
+  }, [
+    practicePlaylist,
+    practiceTrackIndex,
+    currentPracticeDanceId,
+    handlePracticeRequest,
+    practiceAdvancingRef,
+    selectedCrash,
+  ]);
+
   const handlePracticeTimeUpdate = (event) => {
-    setPracticeCurrentTime(event.target.currentTime || 0);
+    const audio = event.target;
+    const track = currentPracticeTrack;
+    if (!track) {
+      setPracticeCurrentTime(0);
+      return;
+    }
+
+    const clipStartSeconds = getClipStartSeconds(track);
+    const clipEndSeconds = getClipEndSeconds(track);
+    const crashSeconds = getActiveCrashSeconds(track);
+    const currentSeconds = audio.currentTime || 0;
+
+    setPracticeCurrentTime(Math.max(currentSeconds - clipStartSeconds, 0));
+
+    const reachedClip = clipEndSeconds != null && currentSeconds >= clipEndSeconds - 0.05;
+    const reachedCrash = crashSeconds != null && currentSeconds >= crashSeconds - 0.05;
+
+    if (reachedClip || reachedCrash) {
+      console.debug("[practice] reached cutoff", {
+        reachedClip,
+        reachedCrash,
+        currentSeconds,
+        crashSeconds,
+        clipEndSeconds,
+        selectedCrash,
+        practiceTrackIndex,
+      });
+      audio.pause();
+      handlePracticeTrackCompletion();
+    }
   };
 
   const handlePracticeLoadedMetadata = (event) => {
-    event.target.playbackRate = practicePlaybackRate;
-    setPracticeDuration(event.target.duration || 0);
-    setPracticeCurrentTime(event.target.currentTime || 0);
+    const audio = event.target;
+    audio.playbackRate = practicePlaybackRate;
+    const track = currentPracticeTrack;
+    if (!track) {
+      setPracticeDuration(audio.duration || 0);
+      setPracticeCurrentTime(audio.currentTime || 0);
+      return;
+    }
+
+    const clipStartSeconds = getClipStartSeconds(track);
+    if (clipStartSeconds > 0 && audio.duration && clipStartSeconds < audio.duration) {
+      try {
+        audio.currentTime = clipStartSeconds;
+      } catch (err) {
+        console.warn("Failed to seek practice audio to clip start", err);
+      }
+    } else {
+      audio.currentTime = clipStartSeconds;
+    }
+
+    const rawDuration = Number.isFinite(audio.duration) ? audio.duration : 0;
+    const clipDuration = getClipDurationSeconds(track);
+    let effectiveDuration =
+      clipDuration != null ? Math.min(rawDuration, clipDuration) : rawDuration;
+    const crashDuration = getActiveCrashDurationFromClip(track);
+    if (crashDuration != null) {
+      effectiveDuration = Math.min(effectiveDuration, crashDuration);
+    }
+
+    setPracticeDuration(effectiveDuration || 0);
+    setPracticeCurrentTime(0);
   };
 
   const renderOnboardingIndicators = (activeStep) => (
@@ -986,9 +1314,6 @@ function App() {
     ),
   );
 
-  const currentPracticeTrack =
-    practicePlaylist?.tracks?.[practiceTrackIndex] ?? null;
-  const currentPracticeDanceId = practicePlaylist?.danceId ?? null;
   const showPracticeControls = Boolean(currentPracticeTrack);
   const practiceEffectiveDuration =
     practiceDuration && Number.isFinite(practiceDuration) && practiceDuration > 0
@@ -1007,6 +1332,55 @@ function App() {
         : 0,
     ),
   );
+  const practiceDanceButtonsMarkup =
+    practiceDances.length > 0
+      ? (
+          <div className="practice-dance-button-group">
+            {practiceDances.map((dance) => (
+              <button
+                key={dance.id}
+                type="button"
+                className={`neomorphus-button${
+                  practicePlaylist?.danceId === dance.id ? " active" : ""
+                }`}
+                disabled={practiceLoadingDance === dance.id || practiceDancesLoading}
+                onClick={() => handlePracticeRequest(dance.id)}
+              >
+                {practiceLoadingDance === dance.id ? "Loading..." : dance.label}
+              </button>
+            ))}
+          </div>
+        )
+      : null;
+  const practiceDanceContent =
+    practiceDanceButtonsMarkup ?? (
+      <p className="practice-dance-empty">
+        {practiceDancesLoading ? "Loading dances..." : "No dances available."}
+      </p>
+    );
+  const pasoPracticeCrashButtonsMarkup =
+    isPasoPracticeContext && hasPasoCrashMetadata
+      ? (
+          <div className="practice-paso-crash-buttons">
+            <span className="practice-paso-crash-heading">Crash Cutoff</span>
+            <div className="practice-paso-crash-button-group">
+              {pasoCrashOptions.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  className={`neomorphus-button${
+                    selectedCrash === option.id ? " active" : ""
+                  }`}
+                  onClick={() => setSelectedCrash(option.id)}
+                >
+                  {PASO_CRASH_BUTTON_LABELS[option.id] ?? option.label}
+                  {option.seconds != null ? ` (${formatTime(option.seconds)})` : ""}
+                </button>
+              ))}
+            </div>
+          </div>
+        )
+      : null;
 
   const previousIndexCandidate = getPreviousIndex();
   const nextIndexCandidate = getNextIndex();
@@ -1031,6 +1405,36 @@ function App() {
     : "Start round playback";
   const isStartDisabled =
     round.length === 0 && !roundAuthBlocked && !pendingRoundStyleRef.current;
+  const currentSong = currentIndex !== null ? round[currentIndex] : null;
+  const upcomingSong = upcomingIndex !== null ? round[upcomingIndex] : null;
+  let currentHeatLabel = null;
+  if (roundRepeatCount > 1) {
+    const hasRoundProgress = currentIndex !== null || breakTimeLeft !== null;
+    if (!hasRoundProgress) {
+      currentHeatLabel = `${roundRepeatCount} Heats`;
+    } else {
+      const heatLabelCandidate =
+        breakTimeLeft !== null
+          ? upcomingSong ?? currentSong ?? round[0] ?? null
+          : currentSong ?? upcomingSong ?? round[0] ?? null;
+      const heatLabelTotal =
+        heatLabelCandidate?.repeatTotal && heatLabelCandidate.repeatTotal > 1
+          ? heatLabelCandidate.repeatTotal
+          : roundRepeatCount;
+      const heatLabelSlotCandidate = heatLabelCandidate?.repeatSlot;
+      const heatLabelSlot =
+        heatLabelSlotCandidate && heatLabelSlotCandidate > 0
+          ? heatLabelSlotCandidate
+          : currentIndex !== null
+          ? (round[currentIndex]?.repeatSlot ?? 1)
+          : 1;
+
+      if (heatLabelTotal > 1 && heatLabelSlot > 0) {
+        currentHeatLabel = `Heat ${heatLabelSlot}`;
+      }
+    }
+  }
+  const heatSuffix = currentHeatLabel ? ` • ${currentHeatLabel}` : "";
 
   const durationControls =
     selectedStyle !== null ? (
@@ -1101,20 +1505,44 @@ function App() {
             }}
           />
         </div>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            width: "100%",
+            gap: "0.5rem",
+          }}
+        >
+          <div className="heat-mode-button-group">
+            {ROUND_HEAT_OPTIONS.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                className={`heat-mode-button${
+                  roundHeatMode === option.id ? " heat-mode-button--active" : ""
+                }`}
+                onClick={() => handleSelectHeatMode(option.id)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
     ) : null;
 
   const nowPlayingLabel = (() => {
     if (currentIndex !== null && round[currentIndex]?.dance) {
-      return `Now Playing (${currentIndex + 1}/${round.length}): ${round[currentIndex].dance}`;
+      return `Now Playing (${currentIndex + 1}/${round.length})${heatSuffix}: ${round[currentIndex].dance}`;
     }
 
     if (breakTimeLeft !== null && upcomingIndex !== null && round[upcomingIndex]?.dance) {
-      return `Up Next (${upcomingIndex + 1}/${round.length}): ${round[upcomingIndex].dance}`;
+      return `Up Next (${upcomingIndex + 1}/${round.length})${heatSuffix}: ${round[upcomingIndex].dance}`;
     }
 
     if (round.length > 0) {
-      return `Round Ready (${round.length} song${round.length === 1 ? "" : "s"})`;
+      return `Round Ready (${round.length} song${round.length === 1 ? "" : "s"})${heatSuffix}`;
     }
 
     return "Round not loaded yet";
@@ -1322,23 +1750,48 @@ function App() {
         onRetry={() => clearAuthError()}
       />
       {isAuthenticated ? (
-        <div className="auth-status-bar">
-          <span className="auth-status-text">
-            Signed in{user?.email ? ` as ${user.email}` : ""}
-          </span>
+        <div className="app-menu-bar" ref={authMenuContainerRef}>
           <button
             type="button"
-            className="neomorphus-button sign-out-button"
-            onClick={handleSignOut}
+            className={`neomorphus-button app-menu-button${isAuthMenuOpen ? " app-menu-button--open" : ""}`}
+            onClick={handleToggleAuthMenu}
+            aria-haspopup="true"
+            aria-expanded={isAuthMenuOpen}
+            aria-label="Account menu"
           >
-            Sign Out
+            Menu
           </button>
+          {isAuthMenuOpen ? (
+            <div className="app-menu-dropdown">
+              <div className="app-menu-header">
+                <span className="app-menu-text">
+                  Signed in{user?.email ? ` as ${user.email}` : ""}
+                </span>
+              </div>
+              {isAdmin ? (
+                <button
+                  type="button"
+                  className="app-menu-item"
+                  onClick={handleOpenAdminLibrary}
+                >
+                  Admin Library
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="app-menu-item"
+                onClick={handleSignOut}
+              >
+                Sign Out
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : (
-        <div className="auth-status-bar">
+        <div className="app-menu-bar">
           <button
             type="button"
-            className="neomorphus-button sign-in-button"
+            className="neomorphus-button app-menu-button"
             onClick={handleShowSignIn}
           >
             Sign In
@@ -1477,44 +1930,14 @@ function App() {
                   <p style={{ color: "#ff8080" }}>{practiceError}</p>
                 )}
                 {practiceDancesLoading && !practiceError && <p>Loading dances...</p>}
-                {practiceDances.length > 0 && (
-                  <div>
-                    <div
-                      style={{
-                        display: "flex",
-                        flexWrap: "wrap",
-                        gap: "0.75rem",
-                      }}
-                    >
-                      {practiceDances.map((dance) => (
-                        <button
-                          key={dance.id}
-                          type="button"
-                          className={`neomorphus-button${
-                            practicePlaylist?.danceId === dance.id ? " active" : ""
-                          }`}
-                          disabled={
-                            practiceLoadingDance === dance.id || practiceDancesLoading
-                          }
-                          onClick={() => handlePracticeRequest(dance.id)}
-                        >
-                          {practiceLoadingDance === dance.id
-                            ? "Loading..."
-                            : dance.label}
-                        </button>
-                      ))}
-                    </div>
-                    {practicePlaylist?.danceId?.toLowerCase() === "chacha" && null}
-                  </div>
-                )}
+                <div className="practice-dance-row">
+                  <div className="practice-dance-column">{practiceDanceContent}</div>
+                  {pasoPracticeCrashButtonsMarkup}
+                </div>
+                {practicePlaylist?.danceId?.toLowerCase() === "chacha" && null}
 
                 {currentPracticeTrack && currentPracticeTrack.file && (
                   <div style={{ marginTop: "1rem" }}>
-                    <p>
-                      Now Practicing: {practicePlaylist?.dance} - {getDisplayName(
-                        currentPracticeTrack.file
-                      )}
-                    </p>
                     <audio
                       ref={practiceAudioRef}
                       src={currentPracticeTrack.file}
@@ -1524,30 +1947,7 @@ function App() {
                       onPause={() => setPracticeIsPlaying(false)}
                       onLoadedMetadata={handlePracticeLoadedMetadata}
                       onTimeUpdate={handlePracticeTimeUpdate}
-                      onEnded={() => {
-                        setPracticeIsPlaying(false);
-                        setPracticeTrackIndex((prev) => {
-                          if (!practicePlaylist?.tracks) return prev;
-                          const next = prev + 1;
-                          if (next < practicePlaylist.tracks.length) {
-                            return next;
-                          }
-                          return prev;
-                        });
-                        const tracksLength = practicePlaylist?.tracks?.length ?? 0;
-                        if (
-                          currentPracticeDanceId &&
-                          tracksLength > 0 &&
-                          practiceTrackIndex >= tracksLength - 1
-                        ) {
-                          handlePracticeRequest(currentPracticeDanceId, {
-                            forceReload: true,
-                          });
-                        } else {
-                          setPracticeCurrentTime(0);
-                          setPracticeDuration(0);
-                        }
-                      }}
+                      onEnded={handlePracticeTrackCompletion}
                       onError={(e) =>
                         console.error(
                           "Practice audio error:",
@@ -1619,57 +2019,31 @@ function App() {
                           type="button"
                           className="neomorphus-button"
                           onClick={() => {
-                            const tracksLength = practicePlaylist?.tracks?.length ?? 0;
-
-                            if (
-                              tracksLength > 0 &&
-                              practiceTrackIndex >= tracksLength - 1
-                            ) {
-                              if (currentPracticeDanceId) {
-                                handlePracticeRequest(currentPracticeDanceId, {
-                                  forceReload: true,
-                                });
-                              }
-                              return;
+                            if (practiceAudioRef.current) {
+                              practiceAudioRef.current.pause();
                             }
-
-                            setPracticeIsPlaying(false);
-                            setPracticeTrackIndex((prev) => {
-                              if (!practicePlaylist?.tracks) return prev;
-                              const next = prev + 1;
-                              if (next < practicePlaylist.tracks.length) {
-                                return next;
-                              }
-                              return prev;
-                            });
-                            setPracticeCurrentTime(0);
-                            setPracticeDuration(0);
+                            handlePracticeTrackCompletion();
                           }}
                           style={{ marginBottom: "0.75rem" }}
                         >
                           Next Song
                         </button>
-                        {practicePlaylist?.tracks?.length ? (
+                        {currentPracticeTrack ? (
                           <ol
                             style={{
                               marginTop: "0.75rem",
                               paddingLeft: "1.5rem",
                             }}
                           >
-                            {practicePlaylist.tracks.map((track, idx) => (
-                              <li
-                                key={`${track.filename ?? track.file}-${idx}`}
-                                style={{
-                                  color:
-                                    idx === practiceTrackIndex ? HIGHLIGHT_COLOR : undefined,
-                                  fontWeight:
-                                    idx === practiceTrackIndex ? 600 : undefined,
-                                }}
-                              >
-                                {getDisplayName(track.file)}
-                                {idx === practiceTrackIndex ? " (current)" : ""}
-                              </li>
-                            ))}
+                            <li
+                              style={{
+                                color: HIGHLIGHT_COLOR,
+                                fontWeight: 600,
+                              }}
+                            >
+                              {getDisplayName(currentPracticeTrack.file)}
+                              {" (current)"}
+                            </li>
                           </ol>
                         ) : null}
                       </div>
@@ -1720,6 +2094,16 @@ function App() {
         </div>
       </div>
     </>
+  );
+}
+
+function App() {
+  return (
+    <Routes>
+      <Route path="/" element={<PlayerApp />} />
+      <Route path="/admin/library" element={<AdminLibrary />} />
+      <Route path="*" element={<PlayerApp />} />
+    </Routes>
   );
 }
 

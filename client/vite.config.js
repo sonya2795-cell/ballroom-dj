@@ -10,4 +10,8 @@ export default defineConfig({
       '/auth': 'http://localhost:3000',
     },
   },
+  test: {
+    environment: 'jsdom',
+    setupFiles: './vitest.setup.js',
+  },
 })
