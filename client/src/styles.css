@@ -279,6 +279,17 @@ textarea {
   margin-top: 1rem;
   display: flex;
   justify-content: center;
+  align-items: flex-start;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.practice-dance-column {
+  display: flex;
+  justify-content: center;
+  flex: 1 1 760px;
+  max-width: 880px;
+  width: min(100%, 820px);
 }
 
 .practice-layout {
@@ -293,10 +304,12 @@ textarea {
 .practice-dance-button-group {
   width: 100%;
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: center;
   gap: 0.75rem;
   margin: 0;
+  overflow-x: auto;
+  padding-bottom: 0.25rem;
 }
 
 .practice-dance-button-group .neomorphus-button {
@@ -322,6 +335,30 @@ textarea {
   gap: 0.75rem;
 }
 
+.practice-paso-crash-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 180px;
+}
+
+.practice-paso-crash-heading {
+  font-weight: 600;
+  text-align: left;
+}
+
+.practice-paso-crash-button-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: flex-start;
+}
+
+.practice-paso-crash-button-group .neomorphus-button {
+  min-width: 120px;
+  white-space: nowrap;
+}
+
 @media (max-width: 720px) {
   .mode-row {
     flex-direction: column;
@@ -331,6 +368,13 @@ textarea {
 
   .practice-dance-row {
     margin-top: 0.75rem;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .practice-dance-column {
+    width: 100%;
   }
 
   .practice-layout {
@@ -339,6 +383,7 @@ textarea {
 
   .practice-dance-button-group {
     gap: 0.5rem;
+    justify-content: flex-start;
   }
 
   .practice-dance-button-group .neomorphus-button {
@@ -347,6 +392,19 @@ textarea {
 
   .practice-content {
     gap: 0.5rem;
+  }
+
+  .practice-paso-crash-buttons {
+    width: 100%;
+    align-items: center;
+  }
+
+  .practice-paso-crash-heading {
+    text-align: center;
+  }
+
+  .practice-paso-crash-button-group {
+    justify-content: center;
   }
 
   .practice-queue-preview {
@@ -885,6 +943,72 @@ textarea {
 .auth-menu-item--danger:focus-visible {
   background: rgba(122, 39, 39, 0.35);
   color: #ffb3b3;
+}
+
+.app-menu-bar {
+  position: absolute;
+  top: 1.25rem;
+  right: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  z-index: 5;
+}
+
+.app-menu-button {
+  min-width: 110px;
+  padding: 0.5rem 0.9rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.app-menu-button--open {
+  box-shadow: inset 3px 3px 6px rgba(13, 14, 17, 0.85),
+    inset -3px -3px 6px rgba(77, 82, 93, 0.5);
+}
+
+.app-menu-dropdown {
+  position: absolute;
+  top: calc(100% + 0.75rem);
+  right: 0;
+  min-width: 220px;
+  background: rgba(32, 34, 40, 0.95);
+  border-radius: 1rem;
+  padding: 0.75rem 1rem;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.app-menu-header {
+  border-bottom: 1px solid rgba(242, 244, 247, 0.12);
+  padding-bottom: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.app-menu-text {
+  font-size: 0.85rem;
+  color: rgba(242, 244, 247, 0.85);
+}
+
+.app-menu-item {
+  background: none;
+  border: none;
+  color: #f2f4f7;
+  font: inherit;
+  text-align: left;
+  padding: 0.45rem 0.25rem;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.app-menu-item:hover,
+.app-menu-item:focus-visible {
+  background: rgba(37, 237, 117, 0.08);
+  outline: none;
 }
 
 .heat-mode-button-group {

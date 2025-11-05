@@ -4,6 +4,12 @@ const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const admin = require("firebase-admin");
 
+const {
+  parseTimeValueToMilliseconds,
+  extractCrashMetadata,
+  buildCrashUpdateFromPayload,
+} = require("./crashUtils");
+
 const app = express();
 const PORT = 3000;
 const rawClientOrigins = process.env.CLIENT_ORIGIN || "http://localhost:5173";
@@ -63,6 +69,13 @@ async function listSongDocuments() {
       }
     }
 
+    const crashMetadata = extractCrashMetadata(
+      data,
+      data.metadata,
+      data.customMetadata,
+      data.crashes
+    );
+
     return {
       id: docSnapshot.id,
       storagePath,
@@ -76,6 +89,9 @@ async function listSongDocuments() {
       updatedAt: data.updatedAt ?? null,
       styleId,
       danceId,
+      crash1Ms: crashMetadata.crash1Ms,
+      crash2Ms: crashMetadata.crash2Ms,
+      crash3Ms: crashMetadata.crash3Ms,
     };
   });
 }
@@ -96,6 +112,12 @@ async function buildSongResponse(song) {
   try {
     const url = await generateSignedUrl(song.storagePath);
     if (!url) return null;
+    const crashMetadata = extractCrashMetadata(
+      song,
+      song.metadata,
+      song.customMetadata,
+      song.crashes
+    );
     return {
       id: song.id,
       title: song.title,
@@ -109,6 +131,9 @@ async function buildSongResponse(song) {
       url,
       styleId: song.styleId,
       danceId: song.danceId,
+      crash1Ms: crashMetadata.crash1Ms,
+      crash2Ms: crashMetadata.crash2Ms,
+      crash3Ms: crashMetadata.crash3Ms,
     };
   } catch (err) {
     console.error("Failed to sign song URL", song?.storagePath, err);
@@ -133,6 +158,12 @@ function toNumberOrNull(value) {
 function mapSongSnapshot(doc) {
   if (!doc.exists) return null;
   const data = doc.data() ?? {};
+  const crashMetadata = extractCrashMetadata(
+    data,
+    data.metadata,
+    data.customMetadata,
+    data.crashes
+  );
   return {
     id: doc.id,
     storagePath: data.storagePath ?? null,
@@ -144,6 +175,9 @@ function mapSongSnapshot(doc) {
     durationMs: typeof data.durationMs === "number" ? data.durationMs : null,
     createdAt: data.createdAt ?? null,
     updatedAt: data.updatedAt ?? null,
+    crash1Ms: crashMetadata.crash1Ms,
+    crash2Ms: crashMetadata.crash2Ms,
+    crash3Ms: crashMetadata.crash3Ms,
   };
 }
 
@@ -154,6 +188,27 @@ async function fallbackSongFromStorage(baseFolder, danceFolder) {
   if (mp3Files.length === 0) return null;
   const candidate = selectRandomItem(mp3Files);
   if (!candidate) return null;
+
+  let fileMetadata = candidate.metadata;
+  if (!fileMetadata || Object.keys(fileMetadata).length === 0) {
+    try {
+      const [fetched] = await candidate.getMetadata();
+      fileMetadata = fetched ?? {};
+    } catch (err) {
+      console.warn("Unable to load storage metadata for crash parsing", candidate.name, err);
+      fileMetadata = {};
+    }
+  }
+
+  const customMetadata =
+    fileMetadata?.metadata ??
+    fileMetadata?.customMetadata ??
+    candidate.metadata?.metadata ??
+    candidate.metadata?.customMetadata ??
+    {};
+
+  const crashMetadata = extractCrashMetadata(customMetadata, fileMetadata, candidate.metadata);
+
   const [url] = await candidate.getSignedUrl({
     action: "read",
     expires: "03-01-2030",
@@ -174,6 +229,9 @@ async function fallbackSongFromStorage(baseFolder, danceFolder) {
     url,
     styleId: null,
     danceId: null,
+    crash1Ms: crashMetadata.crash1Ms,
+    crash2Ms: crashMetadata.crash2Ms,
+    crash3Ms: crashMetadata.crash3Ms,
   };
 }
 
@@ -418,6 +476,9 @@ app.get("/api/round", async (req, res) => {
           durationMs: track?.durationMs ?? null,
           storagePath: track?.storagePath ?? null,
           filename: track?.filename ?? null,
+          crash1Ms: track?.crash1Ms ?? null,
+          crash2Ms: track?.crash2Ms ?? null,
+          crash3Ms: track?.crash3Ms ?? null,
         };
       })
     );
@@ -501,12 +562,25 @@ app.get("/api/practice", async (req, res) => {
         return;
       }
 
+      const merged = { ...existing };
+      ["crash1Ms", "crash2Ms", "crash3Ms"].forEach((field) => {
+        if (
+          (merged[field] === null || typeof merged[field] === "undefined") &&
+          track[field] != null
+        ) {
+          merged[field] = track[field];
+        }
+      });
+
       const existingHasMetadata = Boolean(existing.id);
       const nextHasMetadata = Boolean(track.id);
 
       if (nextHasMetadata && !existingHasMetadata) {
-        trackByStoragePath.set(track.storagePath, track);
+        trackByStoragePath.set(track.storagePath, { ...track, ...merged });
+        return;
       }
+
+      trackByStoragePath.set(track.storagePath, merged);
     };
 
     if (matchingSongs.length > 0) {
@@ -532,6 +606,12 @@ app.get("/api/practice", async (req, res) => {
           });
           const filename = file.name.split("/").pop() || file.name;
 
+          const crashMetadata = extractCrashMetadata(
+            file.metadata?.metadata,
+            file.metadata,
+            file.customMetadata
+          );
+
           addTrack({
             id: null,
             title: filename,
@@ -545,6 +625,9 @@ app.get("/api/practice", async (req, res) => {
             url,
             styleId: requestedStyle,
             danceId: danceConfig.folder,
+            crash1Ms: crashMetadata.crash1Ms,
+            crash2Ms: crashMetadata.crash2Ms,
+            crash3Ms: crashMetadata.crash3Ms,
           });
         })
     );
@@ -576,6 +659,9 @@ app.get("/api/practice", async (req, res) => {
         endMs: track.endMs,
         durationMs: track.durationMs,
         storagePath: track.storagePath,
+        crash1Ms: track.crash1Ms ?? null,
+        crash2Ms: track.crash2Ms ?? null,
+        crash3Ms: track.crash3Ms ?? null,
       })),
     });
   } catch (err) {
@@ -730,22 +816,22 @@ app.get("/api/admin/storage-files", requireAuth, requireAdmin, async (req, res) 
 
     const data = mp3Files.map((file) => {
       const { metadata } = file;
-    const customMetadata = metadata?.metadata ?? {};
+      const customMetadata = metadata?.metadata ?? {};
       const durationMsRaw = customMetadata.durationMs ?? customMetadata.durationMS ?? null;
       const parsedDurationMs = Number.isFinite(Number(durationMsRaw))
         ? Number(durationMsRaw)
         : null;
 
-    return {
-      path: file.name,
-      filename: file.name.split("/").pop() || file.name,
-      size: metadata?.size ? Number(metadata.size) : null,
-      updated: metadata?.updated ?? null,
-      contentType: metadata?.contentType ?? null,
-      durationMs: parsedDurationMs,
-      customMetadata,
-    };
-  });
+      return {
+        path: file.name,
+        filename: file.name.split("/").pop() || file.name,
+        size: metadata?.size ? Number(metadata.size) : null,
+        updated: metadata?.updated ?? null,
+        contentType: metadata?.contentType ?? null,
+        durationMs: parsedDurationMs,
+        customMetadata,
+      };
+    });
 
     console.log(`/api/admin/storage-files -> ${data.length} files`, data.slice(0, 5));
     res.set("Cache-Control", "no-store, no-cache, must-revalidate");
@@ -755,6 +841,32 @@ app.get("/api/admin/storage-files", requireAuth, requireAdmin, async (req, res) 
   } catch (err) {
     console.error("Failed to list storage files", err);
     res.status(500).json({ error: "Failed to list storage files" });
+  }
+});
+
+app.get("/api/admin/song-url", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const storagePathRaw = typeof req.query.storagePath === "string" ? req.query.storagePath : "";
+    const storagePath = storagePathRaw.trim();
+
+    if (!storagePath) {
+      res.status(400).json({ error: "storagePath query parameter is required" });
+      return;
+    }
+
+    const url = await generateSignedUrl(storagePath);
+    if (!url) {
+      res.status(404).json({ error: "Unable to generate playback URL" });
+      return;
+    }
+
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+    res.set("Pragma", "no-cache");
+    res.set("Expires", "0");
+    res.status(200).json({ url });
+  } catch (err) {
+    console.error("Failed to generate playback URL", err);
+    res.status(500).json({ error: "Failed to generate playback URL" });
   }
 });
 
@@ -796,6 +908,16 @@ app.post("/api/admin/songs", requireAuth, requireAdmin, async (req, res) => {
       durationMs: toNumberOrNull(durationMs),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
+
+    const crashUpdate = buildCrashUpdateFromPayload(req.body ?? {});
+    if (crashUpdate.error) {
+      res.status(400).json({ error: crashUpdate.error });
+      return;
+    }
+
+    if (crashUpdate.hasUpdate) {
+      Object.assign(docData, crashUpdate.crashData);
+    }
 
     let docRef;
     if (id) {

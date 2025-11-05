@@ -91,7 +91,7 @@ export async function uploadSongFile({
       if (data?.error) {
         message = data.error;
       }
-    } catch (err) {
+    } catch {
       const text = await response.text();
       if (text) {
         message = text;

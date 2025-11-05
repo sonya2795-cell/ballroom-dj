@@ -141,6 +141,7 @@ export function AuthProvider({ children }) {
       status,
       isAuthenticated: status === "authenticated",
       isUnauthenticated: status === "unauthenticated",
+      isAdmin: user?.customClaims?.role === "admin",
       user,
       authError,
       login,
