@@ -12,21 +12,28 @@ textarea {
   font-family: 'Quicksand', sans-serif;
 }
 
-.app-root {
+#root {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+}
+
+.app-root {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
   padding: 0 1rem 2rem;
   background-color: #30333a;
   color: #f2f4f7;
 }
 
 .app-shell {
-  width: calc(0.825 * (100% - 100px));
-  max-width: calc(0.825 * (80rem - 100px));
-  height: 555px;
+  width: calc(0.99 * (100% - 100px));
+  max-width: calc(0.99 * (80rem - 100px));
+  height: 610px;
   box-sizing: border-box;
   background-color: rgba(48, 51, 58, 0.7);
   backdrop-filter: blur(24px);
@@ -41,16 +48,48 @@ textarea {
   box-shadow: 3px 3px 5px #131417, -3px -3px 5px #4d525d;
   transition: all 500ms ease-in-out;
   color: #f2f4f7;
-  margin-top: calc(20vh - 120px);
+  margin-top: 0;
 }
 
 .app-shell-body {
-  flex: 1 1 calc(100% - (100% / 4));
+  flex: 1 1 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 1.25rem;
   width: 100%;
+}
+
+.app-shell-columns {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2.75rem;
+  padding: 0 0.5rem;
+  width: 92%;
+  max-width: 100%;
+  margin: 0 auto;
+  align-items: center;
+  align-content: center;
+}
+
+.app-shell-column {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 0;
+  justify-content: center;
+  height: 100%;
+}
+
+.app-shell-footer {
+  margin-top: auto;
+  width: 100%;
+  padding-top: 0.75rem;
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
 }
 
 .audio-control-container {
@@ -127,13 +166,31 @@ textarea {
 .app-title {
   font-family: 'Quicksand', sans-serif;
   font-weight: 400;
-  font-size: var(--text-xl);
+  font-size: calc(var(--text-xl) * 0.5);
   margin: 0 0 1.5rem;
 }
 
 .app-title-floating {
   text-align: center;
   margin: calc(0.5rem + 10px) 0 0.25rem;
+}
+
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.05rem 1.5rem;
+  background-color: #30333a;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
+}
+
+.app-header .app-title {
+  margin: 0;
 }
 
 .neomorphus-button {
@@ -196,21 +253,41 @@ textarea {
 
 .style-button-group {
   display: grid;
-  width: 100%;
+  width: min(100%, 980px);
   gap: 0;
   grid-template-columns: repeat(4, 1fr);
+  padding: 0.4rem;
+  background: #2e3138;
+  border-radius: 9999px;
+  box-shadow:
+    inset 3px 3px 6px #21232a,
+    inset -3px -3px 6px #3c4049;
+  overflow: hidden;
+  margin: 0 auto;
 }
 
 .style-button {
   width: 100%;
   font-size: calc(var(--text-xl) * 0.3 + 0.66rem);
-  padding: 1rem 1.35rem;
-  box-shadow: none;
-  border: none;
+  padding: 0.9rem 1.35rem;
   position: relative;
-  border-radius: 1rem 1rem 0 0;
-  background: inherit;
-  color: inherit;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.65);
+  border-radius: 9999px;
+  box-shadow: none;
+  transition: color 160ms ease, background 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.style-coming-soon {
+  font-size: 0.5em;
+  opacity: 0.8;
+  margin-left: 0.35rem;
+  white-space: nowrap;
+}
+
+.style-button:hover:not(:disabled) {
+  color: #f2f4f7;
 }
 
 .mode-row {
@@ -303,17 +380,18 @@ textarea {
 
 .practice-dance-button-group {
   width: 100%;
-  display: flex;
-  flex-wrap: nowrap;
+  display: grid;
+  grid-template-rows: repeat(2, auto);
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(140px, 1fr);
   justify-content: center;
-  gap: 0.75rem;
+  gap: 0.75rem 0.75rem;
   margin: 0;
-  overflow-x: auto;
   padding-bottom: 0.25rem;
 }
 
 .practice-dance-button-group .neomorphus-button {
-  min-width: 140px;
+  width: 100%;
   min-height: 44px;
   font-size: 1rem;
   padding: 0.5rem 1rem;
@@ -359,6 +437,24 @@ textarea {
   white-space: nowrap;
 }
 
+.round-paso-crash-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.round-paso-crash-button-group {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.round-paso-crash-button-group .neomorphus-button {
+  width: 100%;
+}
+
 @media (max-width: 720px) {
   .mode-row {
     flex-direction: column;
@@ -382,12 +478,8 @@ textarea {
   }
 
   .practice-dance-button-group {
-    gap: 0.5rem;
-    justify-content: flex-start;
-  }
-
-  .practice-dance-button-group .neomorphus-button {
-    min-width: 120px;
+    grid-auto-columns: minmax(120px, 1fr);
+    gap: 0.5rem 0.5rem;
   }
 
   .practice-content {
@@ -417,38 +509,6 @@ textarea {
   }
 }
 
-.style-button:not(.active) {
-  border-bottom: 1px solid #41454e;
-}
-
-.style-button:not(.active)::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -0.25rem;
-  height: 0.55rem;
-  border-radius: 0;
-  background: linear-gradient(
-    to top,
-    rgba(77, 82, 93, 0.75),
-    rgba(77, 82, 93, 0)
-  );
-  pointer-events: none;
-  z-index: -1;
-}
-
-.style-button:hover:not(:disabled) {
-  background: inherit;
-  color: inherit;
-  box-shadow: none;
-}
-
-.style-button:not(.active):hover:not(:disabled) {
-  box-shadow: none;
-  color: inherit;
-}
-
 .mode-button {
   width: 100%;
   font-size: calc(((((var(--text-xl) + 1rem) / 2) * 0.75) + 1rem) / 2);
@@ -459,24 +519,9 @@ textarea {
   box-shadow: inset 2px 2px 4px #1f2126, inset -2px -2px 4px #41454e;
 }
 
-.style-button.neomorphus-button:not(.active):hover:not(:disabled) {
-  box-shadow: none;
-  color: inherit;
-}
-
 .neomorphus-button.active {
   color: #25ed27;
   box-shadow: inset 2px 2px 4px #1f2126, inset -2px -2px 4px #41454e;
-}
-
-.style-button.active,
-.style-button.active:hover:not(:disabled) {
-  box-shadow: 3px 0 5px #131417, -3px 0 5px #4d525d, 0 -3px 5px #4d525d;
-  border-bottom: none;
-}
-
-.style-button.active:hover:not(:disabled) {
-  color: #25ed27;
 }
 
 .welcome-modal-backdrop {
@@ -599,20 +644,20 @@ textarea {
   box-shadow: inset 2px 2px 4px #1f2126, inset -2px -2px 4px #41454e;
 }
 
-.style-button.active::after {
-  content: "";
-  position: absolute;
-  inset: calc(100% - 0.05rem) 0 auto 0;
-  height: 0.6rem;
-  background: #30333a;
-  border-radius: 0;
-  pointer-events: none;
-}
-
 .neomorphus-button:disabled {
   opacity: 0.4;
   cursor: not-allowed;
   box-shadow: inset 1px 1px 2px #1f2126, inset -1px -1px 2px #41454e;
+}
+
+.style-button.active,
+.style-button.active:hover:not(:disabled) {
+  background: #30333a;
+  color: #25ed27;
+  box-shadow:
+    3px 3px 5px #131417,
+    -3px -3px 5px #4d525d;
+  transform: translateY(-1px);
 }
 
 .neomorphus-button:focus-visible {
@@ -689,12 +734,79 @@ textarea {
 .neomorphus-slider {
   -webkit-appearance: none;
   appearance: none;
-  width: 33.333%;
+  width: 100%;
   height: 0.65rem;
   border-radius: 0.5rem;
   background: transparent;
   cursor: pointer;
-  margin-left: 15px;
+  margin: 0.75rem 0 0;
+  display: block;
+}
+
+.slider-label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.slider-value {
+  font-size: 0.9rem;
+  color: #f2f4f7;
+  opacity: 0.9;
+}
+
+.heat-controls {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  gap: 0.5rem;
+}
+
+.practice-song-type-panel {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.practice-queue-panel {
+  width: 100%;
+  max-width: 640px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.practice-queue-heading {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.practice-queue-list {
+  margin: 0;
+  padding-left: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.practice-queue-item {
+  color: #f2f4f7;
+}
+
+.practice-queue-item--active {
+  color: #25ed75;
+  font-weight: 600;
+}
+
+.practice-queue-empty {
+  margin: 0;
+  color: #b5bac6;
 }
 
 .neomorphus-slider:focus-visible {
@@ -946,9 +1058,8 @@ textarea {
 }
 
 .app-menu-bar {
-  position: absolute;
-  top: 1.25rem;
-  right: 1.5rem;
+  position: static;
+  margin-left: auto;
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -1012,16 +1123,15 @@ textarea {
 }
 
 .heat-mode-button-group {
-  display: flex;
-  gap: 0.75rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
   width: 100%;
-  justify-content: center;
-  flex-wrap: wrap;
+  gap: 0.75rem;
 }
 
 .heat-mode-button {
-  min-width: 110px;
-  padding: 0.5rem 0.75rem;
+  width: 100%;
+  padding: 0.6rem 0.9rem;
   border: none;
   border-radius: 0.75rem;
   background: rgba(48, 51, 58, 0.7);

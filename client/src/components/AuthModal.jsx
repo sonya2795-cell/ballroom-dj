@@ -3,6 +3,7 @@ const PROVIDER_LABELS = {
   facebook: "Continue with Facebook",
   apple: "Continue with Apple",
 };
+const DISABLED_PROVIDERS = new Set(["facebook", "apple"]);
 
 export default function AuthModal({
   isOpen,
@@ -55,7 +56,8 @@ export default function AuthModal({
                   type="button"
                   className="neomorphus-button provider"
                   onClick={() => onSelectProvider(provider)}
-                  disabled={isProcessing}
+                  disabled={isProcessing || DISABLED_PROVIDERS.has(provider)}
+                  title={DISABLED_PROVIDERS.has(provider) ? "Temporarily disabled" : undefined}
                 >
                   {isProcessing ? "Connecting..." : label}
                 </button>
