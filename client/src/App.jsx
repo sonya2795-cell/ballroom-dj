@@ -8,6 +8,7 @@ import {
   getCrashOptions,
   getCrashRelativeDurationSeconds,
   getCrashSeconds,
+  isPasoSong,
   PASO_DANCE_ID,
 } from "./utils/pasoCrash.js";
 
@@ -36,8 +37,8 @@ const SILENCE_WAV =
 const STYLE_OPTIONS = [
   { id: "ballroom", label: "Ballroom" },
   { id: "latin", label: "Latin" },
-  { id: "rhythm", label: "Rhythm" },
-  { id: "smooth", label: "Smooth" },
+  { id: "rhythm", label: "Rhythm", comingSoon: true },
+  { id: "smooth", label: "Smooth", comingSoon: true },
 ];
 
 const MODE_OPTIONS = [
@@ -45,7 +46,7 @@ const MODE_OPTIONS = [
   { id: "practice", label: "Practice" },
 ];
 
-const ENABLED_STYLE_IDS = new Set(["latin", "ballroom", "rhythm", "smooth"]);
+const ENABLED_STYLE_IDS = new Set(["latin", "ballroom"]);
 const PASO_CRASH_BUTTON_LABELS = {
   crash1: "1st crash",
   crash2: "2nd crash",
@@ -201,6 +202,7 @@ function PlayerApp() {
     selectedMode === "practice" &&
     (normalizedPracticeDanceId === PASO_DANCE_ID ||
       normalizedPracticeLoadingDanceId === PASO_DANCE_ID);
+  const isLatinRoundMode = selectedMode === "round" && selectedStyle === "latin";
   const pasoPracticeMetadata = useMemo(
     () => (isPasoPracticeContext ? currentPracticeTrack ?? null : null),
     [isPasoPracticeContext, currentPracticeTrack],
@@ -210,6 +212,7 @@ function PlayerApp() {
     [pasoPracticeMetadata],
   );
   const hasPasoCrashMetadata = pasoCrashOptions.length > 0;
+  const allowCrashSelection = isPasoPracticeContext || isLatinRoundMode;
   const getActiveCrashSeconds = useCallback(
     (song) => getCrashSeconds(song, selectedCrash),
     [selectedCrash],
@@ -231,6 +234,7 @@ function PlayerApp() {
   const authPromptReasonRef = useRef(null);
   const authPromptTimeoutRef = useRef(null);
   const authMenuContainerRef = useRef(null);
+  const userSelectedCrashRef = useRef(false);
 
   // Prevent duplicate advancing
   const advancingRef = useRef(false);
@@ -397,6 +401,27 @@ function PlayerApp() {
     setPracticeDuration(0);
     setPracticeLoadingDance(null);
   };
+
+  const getRoundDurationLimitSeconds = useCallback(
+    (track, sliderOverrideSeconds = songDurationSeconds) => {
+      const clipDuration = getClipDurationSeconds(track);
+      const isPasoRoundTrack = isLatinRoundMode && isPasoSong(track);
+      const crashDuration = isPasoRoundTrack ? getActiveCrashDurationFromClip(track) : null;
+      const sliderDuration = isPasoRoundTrack ? null : sliderOverrideSeconds;
+
+      const candidates = [];
+      if (clipDuration != null) candidates.push(clipDuration);
+      if (crashDuration != null) candidates.push(crashDuration);
+      if (sliderDuration != null) candidates.push(sliderDuration);
+
+      if (candidates.length === 0) {
+        return songDurationSeconds;
+      }
+
+      return Math.min(...candidates);
+    },
+    [getActiveCrashDurationFromClip, isLatinRoundMode, songDurationSeconds],
+  );
 
   const schedulePlayTimeout = (durationOverrideSeconds = songDurationSeconds) => {
     clearPlayTimeout();
@@ -606,7 +631,7 @@ function PlayerApp() {
     }
     setBreakTimeLeft(null);
     setIsPlaying(true);
-    schedulePlayTimeout();
+    schedulePlayTimeout(getRoundDurationLimitSeconds(currentSong));
   };
 
   const handlePause = () => {
@@ -1018,6 +1043,27 @@ function PlayerApp() {
   }, [selectedMode, selectedStyle]);
 
   useEffect(() => {
+    if (selectedMode !== "practice") return;
+    if (!selectedStyle || !ENABLED_STYLE_IDS.has(selectedStyle)) return;
+    if (practiceDancesLoading || practiceLoadingDance) return;
+    if (!practiceDances.length) return;
+    if (practicePlaylist?.danceId) return;
+
+    const firstDanceId = practiceDances[0]?.id;
+    if (firstDanceId) {
+      handlePracticeRequest(firstDanceId);
+    }
+  }, [
+    selectedMode,
+    selectedStyle,
+    practiceDances,
+    practiceDancesLoading,
+    practiceLoadingDance,
+    practicePlaylist?.danceId,
+    handlePracticeRequest,
+  ]);
+
+  useEffect(() => {
     if (round.length === 0) {
       return;
     }
@@ -1036,10 +1082,13 @@ function PlayerApp() {
   }, [roundAuthBlocked]);
 
   useEffect(() => {
-    if (!isPasoPracticeContext && selectedCrash !== null) {
-      setSelectedCrash(null);
+    if (!allowCrashSelection) {
+      userSelectedCrashRef.current = false;
+      if (selectedCrash !== null) {
+        setSelectedCrash(null);
+      }
     }
-  }, [isPasoPracticeContext, selectedCrash]);
+  }, [allowCrashSelection, selectedCrash]);
 
   useEffect(() => {
     const audio = practiceAudioRef.current;
@@ -1257,6 +1306,18 @@ function PlayerApp() {
     }
   };
 
+  const handlePracticePrevious = () => {
+    setPracticeTrackIndex((prev) => (prev > 0 ? prev - 1 : prev));
+    setPracticeCurrentTime(0);
+    setPracticeDuration(0);
+    setPracticeIsPlaying(false);
+    const audio = practiceAudioRef.current;
+    if (audio) {
+      audio.pause();
+      audio.currentTime = 0;
+    }
+  };
+
   useEffect(() => {
     const roundAudio = audioRef.current;
     if (roundAudio) {
@@ -1302,18 +1363,6 @@ function PlayerApp() {
     [clearAuthPromptTimeout, clearBreakInterval, clearPlayTimeout, clearFadeTimers]
   );
 
-  const effectiveDuration = duration
-    ? Math.min(duration, songDurationSeconds)
-    : songDurationSeconds;
-  const effectiveCurrentTime = Math.min(currentTime, effectiveDuration);
-  const progressPercent = Math.min(
-    100,
-    Math.max(
-      0,
-      effectiveDuration > 0 ? (effectiveCurrentTime / effectiveDuration) * 100 : 0,
-    ),
-  );
-
   const showPracticeControls = Boolean(currentPracticeTrack);
   const practiceEffectiveDuration =
     practiceDuration && Number.isFinite(practiceDuration) && practiceDuration > 0
@@ -1332,6 +1381,21 @@ function PlayerApp() {
         : 0,
     ),
   );
+  const practicePlaylistLength = practicePlaylist?.tracks?.length ?? 0;
+  const practiceCanGoPrevious = practiceTrackIndex > 0;
+  const practiceCanGoNext =
+    practicePlaylistLength > 0 && practiceTrackIndex < practicePlaylistLength - 1;
+  const practiceNowPlayingLabel = (() => {
+    if (currentPracticeTrack?.file) {
+      return getDisplayName(currentPracticeTrack.file);
+    }
+    if (practicePlaylistLength > 0) {
+      return `Practice playlist ready (${practicePlaylistLength} track${
+        practicePlaylistLength === 1 ? "" : "s"
+      })`;
+    }
+    return "Practice not loaded yet";
+  })();
   const practiceDanceButtonsMarkup =
     practiceDances.length > 0
       ? (
@@ -1358,6 +1422,26 @@ function PlayerApp() {
         {practiceDancesLoading ? "Loading dances..." : "No dances available."}
       </p>
     );
+  const practiceQueueContent =
+    practicePlaylist?.tracks?.length
+      ? (
+          <ol className="practice-queue-list">
+            {practicePlaylist.tracks.map((track, idx) => (
+              <li
+                key={track.id ?? track.file ?? idx}
+                className={idx === practiceTrackIndex ? "practice-queue-item practice-queue-item--active" : "practice-queue-item"}
+              >
+                {getDisplayName(track.file)}
+                {idx === practiceTrackIndex ? " (current)" : ""}
+              </li>
+            ))}
+          </ol>
+        )
+      : (
+          <p className="practice-queue-empty">
+            No practice tracks loaded yet.
+          </p>
+        );
   const pasoPracticeCrashButtonsMarkup =
     isPasoPracticeContext && hasPasoCrashMetadata
       ? (
@@ -1407,6 +1491,61 @@ function PlayerApp() {
     round.length === 0 && !roundAuthBlocked && !pendingRoundStyleRef.current;
   const currentSong = currentIndex !== null ? round[currentIndex] : null;
   const upcomingSong = upcomingIndex !== null ? round[upcomingIndex] : null;
+  const roundDurationLimitSeconds = getRoundDurationLimitSeconds(currentSong);
+  const effectiveDuration = duration
+    ? Math.min(duration, roundDurationLimitSeconds)
+    : roundDurationLimitSeconds;
+  const effectiveCurrentTime = Math.min(currentTime, effectiveDuration);
+  const progressPercent = Math.min(
+    100,
+    Math.max(
+      0,
+      effectiveDuration > 0 ? (effectiveCurrentTime / effectiveDuration) * 100 : 0,
+    ),
+  );
+  const isPasoRoundTrack = isLatinRoundMode && isPasoSong(currentSong);
+  const roundPasoReferenceTrack = useMemo(
+    () => (isLatinRoundMode ? round.find((song) => isPasoSong(song)) ?? null : null),
+    [isLatinRoundMode, round],
+  );
+  const roundPasoCrashOptions = useMemo(
+    () => (roundPasoReferenceTrack ? getCrashOptions(roundPasoReferenceTrack) : []),
+    [roundPasoReferenceTrack],
+  );
+  const handleSelectCrash = (crashId) => {
+    userSelectedCrashRef.current = true;
+    setSelectedCrash(crashId);
+    if (isPasoRoundTrack && isPlaying) {
+      schedulePlayTimeout(getRoundDurationLimitSeconds(currentSong));
+    }
+  };
+  useEffect(() => {
+    if (!allowCrashSelection || userSelectedCrashRef.current) {
+      return;
+    }
+    if (!roundPasoCrashOptions.length) {
+      return;
+    }
+    const closest = roundPasoCrashOptions.reduce(
+      (best, option) => {
+        const diff = Math.abs((option.seconds ?? 0) - songDurationSeconds);
+        if (!best || diff < best.diff) {
+          return { id: option.id, diff };
+        }
+        return best;
+      },
+      null,
+    );
+    if (closest && closest.id && closest.id !== selectedCrash) {
+      setSelectedCrash(closest.id);
+    }
+  }, [
+    allowCrashSelection,
+    roundPasoCrashOptions,
+    selectedCrash,
+    songDurationSeconds,
+    userSelectedCrashRef,
+  ]);
   let currentHeatLabel = null;
   if (roundRepeatCount > 1) {
     const hasRoundProgress = currentIndex !== null || breakTimeLeft !== null;
@@ -1439,17 +1578,19 @@ function PlayerApp() {
   const durationControls =
     selectedStyle !== null ? (
       <div
+        className="round-controls"
         style={{
           display: "flex",
           flexDirection: "column",
           gap: "0.75rem",
-          alignSelf: "center",
+          width: "100%",
         }}
       >
         <div>
-          <label htmlFor="break-duration-slider">
-            Break Duration: {breakDurationSeconds} seconds
-          </label>
+          <div className="slider-label-row">
+            <label htmlFor="break-duration-slider">Break Duration</label>
+            <span className="slider-value">{breakDurationSeconds} seconds</span>
+          </div>
           <input
             id="break-duration-slider"
             type="range"
@@ -1462,30 +1603,10 @@ function PlayerApp() {
           />
         </div>
         <div>
-          <label htmlFor="song-duration-slider">
-            Song Duration: {formatTime(songDurationSeconds)}
-          </label>
-          <input
-            id="song-duration-slider"
-            type="range"
-            min={SONG_MIN_SECONDS}
-            max={SONG_MAX_SECONDS}
-            step={SONG_STEP_SECONDS}
-            value={songDurationSeconds}
-            className="neomorphus-slider"
-            onChange={(e) => {
-              const nextValue = Number(e.target.value);
-              setSongDurationSeconds(nextValue);
-              if (isPlaying) {
-                schedulePlayTimeout(nextValue);
-              }
-            }}
-          />
-        </div>
-        <div>
-          <label htmlFor="round-playback-speed-slider">
-            Speed: {roundPlaybackSpeedPercent}%
-          </label>
+          <div className="slider-label-row">
+            <label htmlFor="round-playback-speed-slider">Speed</label>
+            <span className="slider-value">{roundPlaybackSpeedPercent}%</span>
+          </div>
           <input
             id="round-playback-speed-slider"
             type="range"
@@ -1501,34 +1622,78 @@ function PlayerApp() {
               }
               setRoundPlaybackSpeedPercent(
                 Math.min(Math.max(nextValue, SPEED_MIN_PERCENT), SPEED_MAX_PERCENT),
-              );
+             );
             }}
           />
         </div>
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            width: "100%",
-            gap: "0.5rem",
-          }}
-        >
-          <div className="heat-mode-button-group">
-            {ROUND_HEAT_OPTIONS.map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                className={`heat-mode-button${
-                  roundHeatMode === option.id ? " heat-mode-button--active" : ""
-                }`}
-                onClick={() => handleSelectHeatMode(option.id)}
-              >
-                {option.label}
-              </button>
-            ))}
+        {!isPasoPracticeContext && (
+          <div>
+            <div className="slider-label-row">
+              <label htmlFor="song-duration-slider">Song Length</label>
+              <span className="slider-value">{formatTime(songDurationSeconds)}</span>
+            </div>
+            <input
+              id="song-duration-slider"
+              type="range"
+              min={SONG_MIN_SECONDS}
+              max={SONG_MAX_SECONDS}
+              step={SONG_STEP_SECONDS}
+              value={songDurationSeconds}
+              className="neomorphus-slider"
+              onChange={(e) => {
+                const nextValue = Number(e.target.value);
+                setSongDurationSeconds(nextValue);
+                if (isPlaying) {
+                  schedulePlayTimeout(getRoundDurationLimitSeconds(currentSong, nextValue));
+                }
+              }}
+            />
           </div>
-        </div>
+        )}
+        {isLatinRoundMode ? (
+          <div className="round-paso-crash-buttons" style={{ width: "100%" }}>
+            <span className="round-paso-crash-heading">Paso Doble Crash</span>
+            <div className="round-paso-crash-button-group">
+              {["crash1", "crash2", "crash3"].map((crashId) => {
+                const optionSeconds =
+                  roundPasoCrashOptions.find((option) => option.id === crashId)?.seconds ??
+                  null;
+                const crashTimeLabel =
+                  optionSeconds != null ? formatTime(optionSeconds) : "N/A";
+                return (
+                  <button
+                    key={crashId}
+                    type="button"
+                    className={`neomorphus-button${
+                      selectedCrash === crashId ? " active" : ""
+                    }`}
+                    onClick={() => handleSelectCrash(crashId)}
+                  >
+                    {PASO_CRASH_BUTTON_LABELS[crashId]} ({crashTimeLabel})
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
+        {selectedMode !== "practice" && (
+          <div className="heat-controls">
+            <div className="heat-mode-button-group">
+              {ROUND_HEAT_OPTIONS.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  className={`heat-mode-button${
+                    roundHeatMode === option.id ? " heat-mode-button--active" : ""
+                  }`}
+                  onClick={() => handleSelectHeatMode(option.id)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     ) : null;
 
@@ -1549,7 +1714,7 @@ function PlayerApp() {
   })();
 
   const roundTransportControls =
-    selectedMode === "round"
+        selectedMode === "round"
       ? (
           <div
             style={{
@@ -1564,11 +1729,12 @@ function PlayerApp() {
             <div
               style={{
                 width: "100%",
-                maxWidth: "520px",
+                maxWidth: "100%",
                 display: "flex",
                 flexDirection: "column",
                 alignItems: "center",
                 gap: "0.5rem",
+                alignSelf: "stretch",
               }}
             >
               <div
@@ -1589,42 +1755,38 @@ function PlayerApp() {
                 style={{
                   width: "100%",
                   display: "flex",
-                  alignItems: "center",
-                  gap: "0.75rem",
+                  flexDirection: "column",
+                  gap: "0.5rem",
                 }}
               >
-                <span
-                  style={{
-                    minWidth: "3.5rem",
-                    textAlign: "right",
-                    fontSize: "0.75rem",
-                    color: TEXT_COLOR,
-                  }}
+                <div
+                  className="round-progress-wrapper"
+                  style={{ width: "91%", maxWidth: "91%", alignSelf: "center" }}
                 >
-                  {formatTime(effectiveCurrentTime)}
-                </span>
-                <div className="round-progress-wrapper" style={{ flex: 1 }}>
                   <progress
                     value={effectiveCurrentTime}
                     max={effectiveDuration || 1}
                     className="round-progress"
-                    style={{ width: "100%" }}
                   />
                   <div
                     className="round-progress-thumb"
                     style={{ left: `${progressPercent}%` }}
                   />
                 </div>
-                <span
+                <div
                   style={{
-                    minWidth: "3.5rem",
-                    textAlign: "left",
-                    fontSize: "0.75rem",
+                    width: "91%",
+                    maxWidth: "91%",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    fontSize: "0.8rem",
                     color: TEXT_COLOR,
+                    alignSelf: "center",
                   }}
                 >
-                  {formatTime(effectiveDuration)}
-                </span>
+                  <span>{formatTime(effectiveCurrentTime)}</span>
+                  <span>{formatTime(effectiveDuration)}</span>
+                </div>
               </div>
             </div>
             <div
@@ -1671,6 +1833,124 @@ function PlayerApp() {
         )
       : null;
 
+  const practiceTransportControls =
+    selectedMode === "practice"
+      ? (
+          <div
+            style={{
+              width: "100%",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: "1rem",
+              marginTop: "1.5rem",
+            }}
+          >
+            <div
+              style={{
+                width: "100%",
+                maxWidth: "100%",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: "0.5rem",
+                alignSelf: "stretch",
+              }}
+            >
+              <div
+                style={{
+                  textAlign: "center",
+                  fontWeight: 600,
+                  width: "100%",
+                  color: currentPracticeTrack ? HIGHLIGHT_COLOR : TEXT_COLOR,
+                  opacity: practicePlaylistLength === 0 ? 0.75 : 1,
+                }}
+              >
+                {practiceNowPlayingLabel}
+              </div>
+              <div
+                style={{
+                  width: "91%",
+                  maxWidth: "91%",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "0.5rem",
+                }}
+              >
+                <div
+                  className="round-progress-wrapper"
+                  style={{ width: "91%", maxWidth: "91%", alignSelf: "center" }}
+                >
+                  <progress
+                    value={practiceEffectiveCurrentTime}
+                    max={practiceEffectiveDuration || 1}
+                    className="round-progress"
+                  />
+                  <div
+                    className="round-progress-thumb"
+                    style={{ left: `${practiceProgressPercent}%` }}
+                  />
+                </div>
+                <div
+                  style={{
+                    width: "91%",
+                    maxWidth: "91%",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    fontSize: "0.8rem",
+                    color: TEXT_COLOR,
+                    alignSelf: "center",
+                  }}
+                >
+                  <span>{formatTime(practiceEffectiveCurrentTime)}</span>
+                  <span>{formatTime(practiceEffectiveDuration)}</span>
+                </div>
+              </div>
+            </div>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                gap: "0.75rem",
+                flexWrap: "wrap",
+              }}
+            >
+              <button
+                type="button"
+                className="neomorphus-button round-control"
+                onClick={handlePracticePrevious}
+                disabled={!practiceCanGoPrevious}
+                aria-label="Previous Practice Track"
+                title="Previous Practice Track"
+              >
+                ⏮️
+              </button>
+              <button
+                type="button"
+                className="neomorphus-button round-control"
+                onClick={handlePracticeToggle}
+                disabled={!currentPracticeTrack?.file}
+                aria-label={practiceIsPlaying ? "Pause practice playback" : "Play practice playback"}
+                title={practiceIsPlaying ? "Pause Practice" : "Play Practice"}
+              >
+                {practiceIsPlaying ? "⏸️" : "▶️"}
+              </button>
+              <button
+                type="button"
+                className="neomorphus-button round-control"
+                onClick={handlePracticeTrackCompletion}
+                disabled={!practicePlaylistLength}
+                aria-label="Next Practice Track"
+                title="Next Practice Track"
+              >
+                ⏭️
+              </button>
+            </div>
+          </div>
+        )
+      : null;
+
   return (
     <>
       {showWelcomeModal && (
@@ -1703,6 +1983,7 @@ function PlayerApp() {
                   disabled={!ENABLED_STYLE_IDS.has(style.id)}
                 >
                   {style.label}
+                  {style.comingSoon ? <span className="style-coming-soon"> (coming soon)</span> : null}
                 </button>
               ))}
             </div>
@@ -1749,56 +2030,58 @@ function PlayerApp() {
         error={authError}
         onRetry={() => clearAuthError()}
       />
-      {isAuthenticated ? (
-        <div className="app-menu-bar" ref={authMenuContainerRef}>
-          <button
-            type="button"
-            className={`neomorphus-button app-menu-button${isAuthMenuOpen ? " app-menu-button--open" : ""}`}
-            onClick={handleToggleAuthMenu}
-            aria-haspopup="true"
-            aria-expanded={isAuthMenuOpen}
-            aria-label="Account menu"
-          >
-            Menu
-          </button>
-          {isAuthMenuOpen ? (
-            <div className="app-menu-dropdown">
-              <div className="app-menu-header">
-                <span className="app-menu-text">
-                  Signed in{user?.email ? ` as ${user.email}` : ""}
-                </span>
-              </div>
-              {isAdmin ? (
+      <header className="app-header">
+        <h1 className="app-title app-title-floating">Ballroom DJ</h1>
+        {isAuthenticated ? (
+          <div className="app-menu-bar" ref={authMenuContainerRef}>
+            <button
+              type="button"
+              className={`neomorphus-button app-menu-button${isAuthMenuOpen ? " app-menu-button--open" : ""}`}
+              onClick={handleToggleAuthMenu}
+              aria-haspopup="true"
+              aria-expanded={isAuthMenuOpen}
+              aria-label="Account menu"
+            >
+              Menu
+            </button>
+            {isAuthMenuOpen ? (
+              <div className="app-menu-dropdown">
+                <div className="app-menu-header">
+                  <span className="app-menu-text">
+                    Signed in{user?.email ? ` as ${user.email}` : ""}
+                  </span>
+                </div>
+                {isAdmin ? (
+                  <button
+                    type="button"
+                    className="app-menu-item"
+                    onClick={handleOpenAdminLibrary}
+                  >
+                    Admin Library
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className="app-menu-item"
-                  onClick={handleOpenAdminLibrary}
+                  onClick={handleSignOut}
                 >
-                  Admin Library
+                  Sign Out
                 </button>
-              ) : null}
-              <button
-                type="button"
-                className="app-menu-item"
-                onClick={handleSignOut}
-              >
-                Sign Out
-              </button>
-            </div>
-          ) : null}
-        </div>
-      ) : (
-        <div className="app-menu-bar">
-          <button
-            type="button"
-            className="neomorphus-button app-menu-button"
-            onClick={handleShowSignIn}
-          >
-            Sign In
-          </button>
-        </div>
-      )}
-      <h1 className="app-title app-title-floating">Ballroom DJ</h1>
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <div className="app-menu-bar">
+            <button
+              type="button"
+              className="neomorphus-button app-menu-button"
+              onClick={handleShowSignIn}
+            >
+              Sign In
+            </button>
+          </div>
+        )}
+      </header>
 
       <div className="app-root">
         <div className="app-shell">
@@ -1813,284 +2096,217 @@ function PlayerApp() {
                 }`}
               >
                 {style.label}
+                {style.comingSoon ? <span className="style-coming-soon"> (coming soon)</span> : null}
               </button>
             ))}
           </div>
 
-          {selectedStyle && (
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "0.75rem",
-                marginBottom: "1.5rem",
-                marginTop: "0.5rem",
-              }}
-            >
-              {MODE_OPTIONS.map((mode) => (
-                <button
-                  key={mode.id}
-                  type="button"
-                  className={`neomorphus-button mode-button${
-                    selectedMode === mode.id ? " active" : ""
-                  }`}
-                  onClick={() => handleModeChange(mode.id)}
-                >
-                  {mode.label}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {selectedMode === "round" &&
-            (round.length > 0 ? (
-              <div
-                style={{
-                  display: "flex",
-                  flexWrap: "wrap",
-                  gap: "1.5rem",
-                  alignItems: "center",
-                }}
-              >
-                <div style={{ alignSelf: "flex-start" }}>
-                  <button
-                    onClick={() => {
-                      if (selectedStyle) {
-                        generateRound(selectedStyle);
-                      }
+          <div className="app-shell-body">
+            <div className="app-shell-columns">
+              <div className="app-shell-column app-shell-column--left">
+                {selectedStyle && (
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.75rem",
+                      marginTop: "1.5rem",
+                      marginBottom: "0.35rem",
                     }}
-                    disabled={!selectedStyle || !ENABLED_STYLE_IDS.has(selectedStyle)}
-                    className="neomorphus-button"
-                    style={{ marginBottom: "0.75rem" }}
                   >
-                    🔄
-                  </button>
-                  <ul>
-                    {round.map((s, i) => (
-                      <li
-                        key={i}
-                        style={{
-                          fontSize:
-                            currentIndex === i && breakTimeLeft === null
-                              ? ACTIVE_FONT_SIZE
-                              : breakTimeLeft !== null && upcomingIndex === i
-                              ? UPCOMING_FONT_SIZE
-                              : undefined,
-                          color:
-                            currentIndex === i && breakTimeLeft === null
-                              ? HIGHLIGHT_COLOR
-                              : breakTimeLeft !== null && upcomingIndex === i
-                              ? HIGHLIGHT_COLOR
-                              : undefined,
-                        }}
+                    {MODE_OPTIONS.map((mode) => (
+                      <button
+                        key={mode.id}
+                        type="button"
+                        className={`neomorphus-button mode-button${
+                          selectedMode === mode.id ? " active" : ""
+                        }`}
+                        onClick={() => handleModeChange(mode.id)}
                       >
-                        {getDisplayName(s.file)}
-                      </li>
+                        {mode.label}
+                      </button>
                     ))}
-                  </ul>
-
-                </div>
-                {durationControls}
-              </div>
-            ) : roundAuthBlocked ? (
-              <div
-                style={{
-                  marginTop: "1.25rem",
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "flex-start",
-                  gap: "1rem",
-                }}
-              >
-                {round.length > 0 ? (
-                  <ul style={{ margin: 0, paddingLeft: "1.25rem" }}>
-                    {round.map((s, i) => (
-                      <li key={i}>
-                        {getDisplayName(s.file)}
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p style={{ color: "#b5bac6", margin: 0 }}>
-                    Sign in to start this round.
-                  </p>
-                )}
-                {durationControls}
-              </div>
-            ) : (
-              <div style={{ marginTop: "1rem" }}>{durationControls}</div>
-            ))}
-
-          {roundTransportControls}
-
-          {selectedMode === "practice" && selectedStyle && (
-            ENABLED_STYLE_IDS.has(selectedStyle) ? (
-              <div style={{ marginTop: "1rem" }}>
-                {practiceError && (
-                  <p style={{ color: "#ff8080" }}>{practiceError}</p>
-                )}
-                {practiceDancesLoading && !practiceError && <p>Loading dances...</p>}
-                <div className="practice-dance-row">
-                  <div className="practice-dance-column">{practiceDanceContent}</div>
-                  {pasoPracticeCrashButtonsMarkup}
-                </div>
-                {practicePlaylist?.danceId?.toLowerCase() === "chacha" && null}
-
-                {currentPracticeTrack && currentPracticeTrack.file && (
-                  <div style={{ marginTop: "1rem" }}>
-                    <audio
-                      ref={practiceAudioRef}
-                      src={currentPracticeTrack.file}
-                      preload="auto"
-                      style={{ display: "none" }}
-                      onPlay={() => setPracticeIsPlaying(true)}
-                      onPause={() => setPracticeIsPlaying(false)}
-                      onLoadedMetadata={handlePracticeLoadedMetadata}
-                      onTimeUpdate={handlePracticeTimeUpdate}
-                      onEnded={handlePracticeTrackCompletion}
-                      onError={(e) =>
-                        console.error(
-                          "Practice audio error:",
-                          e,
-                          "URL:",
-                          currentPracticeTrack.file
-                        )
-                      }
-                    />
-                    {showPracticeControls && (
-                      <div style={{ marginTop: "0.75rem" }}>
-                        <div style={{ marginBottom: "0.75rem" }}>
-                          <label htmlFor="practice-playback-speed-slider">
-                            Speed: {practicePlaybackSpeedPercent}%
-                          </label>
-                          <input
-                            id="practice-playback-speed-slider"
-                            type="range"
-                            min={SPEED_MIN_PERCENT}
-                            max={SPEED_MAX_PERCENT}
-                            step={SPEED_STEP_PERCENT}
-                            value={practicePlaybackSpeedPercent}
-                            className="neomorphus-slider"
-                            onChange={(e) => {
-                              const nextValue = Number(e.target.value);
-                              if (!Number.isFinite(nextValue)) {
-                                return;
-                              }
-                              setPracticePlaybackSpeedPercent(
-                                Math.min(
-                                  Math.max(nextValue, SPEED_MIN_PERCENT),
-                                  SPEED_MAX_PERCENT,
-                                ),
-                              );
-                            }}
-                          />
-                        </div>
-                        <button
-                          type="button"
-                          className="neomorphus-button"
-                          onClick={handlePracticeToggle}
-                          style={{ marginBottom: "0.75rem", marginRight: "0.75rem" }}
-                        >
-                          {practiceIsPlaying ? "Pause" : "Play"}
-                        </button>
-                        <div
-                          style={{
-                            marginBottom: "0.75rem",
-                          }}
-                        >
-                          <div className="round-progress-wrapper">
-                            <progress
-                              value={practiceEffectiveCurrentTime}
-                              max={practiceEffectiveDuration || 1}
-                              className="round-progress"
-                            />
-                            <div
-                              className="round-progress-thumb"
-                              style={{ left: `${practiceProgressPercent}%` }}
-                            />
-                          </div>
-                          <span>
-                            {formatTime(practiceEffectiveCurrentTime)} / {formatTime(
-                              practiceEffectiveDuration
-                            )}
-                          </span>
-                        </div>
-                        <button
-                          type="button"
-                          className="neomorphus-button"
-                          onClick={() => {
-                            if (practiceAudioRef.current) {
-                              practiceAudioRef.current.pause();
-                            }
-                            handlePracticeTrackCompletion();
-                          }}
-                          style={{ marginBottom: "0.75rem" }}
-                        >
-                          Next Song
-                        </button>
-                        {currentPracticeTrack ? (
-                          <ol
-                            style={{
-                              marginTop: "0.75rem",
-                              paddingLeft: "1.5rem",
-                            }}
-                          >
-                            <li
-                              style={{
-                                color: HIGHLIGHT_COLOR,
-                                fontWeight: 600,
-                              }}
-                            >
-                              {getDisplayName(currentPracticeTrack.file)}
-                              {" (current)"}
-                            </li>
-                          </ol>
-                        ) : null}
-                      </div>
-                    )}
                   </div>
                 )}
-                {practicePlaylist && (!practicePlaylist.tracks?.length || !currentPracticeTrack) && (
-                  <p style={{ marginTop: "1rem" }}>
-                    No tracks available right now for {practicePlaylist.dance}.
-                  </p>
+
+                {durationControls}
+
+                {selectedMode === "practice" && selectedStyle && (
+                  ENABLED_STYLE_IDS.has(selectedStyle) ? (
+                    <div style={{ marginTop: "1rem" }}>
+                      {practiceError && <p style={{ color: "#ff8080" }}>{practiceError}</p>}
+                      {practiceDancesLoading && !practiceError && <p>Loading dances...</p>}
+                      {pasoPracticeCrashButtonsMarkup}
+                      {practicePlaylist?.danceId?.toLowerCase() === "chacha" && null}
+
+                      {currentPracticeTrack && currentPracticeTrack.file && (
+                        <div style={{ marginTop: "1rem" }}>
+                          <audio
+                            ref={practiceAudioRef}
+                            src={currentPracticeTrack.file}
+                            preload="auto"
+                            style={{ display: "none" }}
+                            onPlay={() => setPracticeIsPlaying(true)}
+                            onPause={() => setPracticeIsPlaying(false)}
+                            onLoadedMetadata={handlePracticeLoadedMetadata}
+                            onTimeUpdate={handlePracticeTimeUpdate}
+                            onEnded={handlePracticeTrackCompletion}
+                          onError={(e) =>
+                            console.error(
+                              "Practice audio error:",
+                              e,
+                              "URL:",
+                              currentPracticeTrack.file
+                            )
+                          }
+                        />
+                          {showPracticeControls && null}
+                      </div>
+                    )}
+                      {practicePlaylist && (!practicePlaylist.tracks?.length || !currentPracticeTrack) && (
+                        <p style={{ marginTop: "1rem" }}>
+                          No tracks available right now for {practicePlaylist.dance}.
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <p style={{ marginTop: "1rem" }}>
+                      Practice mode for {
+                        STYLE_OPTIONS.find((opt) => opt.id === selectedStyle)?.label ||
+                        selectedStyle
+                      } is not available yet.
+                    </p>
+                  )
+                )}
+
+                {selectedMode === "round" && breakTimeLeft !== null && (
+                  <div style={{ marginTop: "1rem" }}>
+                    <h3>Next song starts in: {breakTimeLeft} seconds</h3>
+                  </div>
                 )}
               </div>
-            ) : (
-              <p style={{ marginTop: "1rem" }}>
-                Practice mode for {
-                  STYLE_OPTIONS.find((opt) => opt.id === selectedStyle)?.label ||
-                  selectedStyle
-                } is not available yet.
-              </p>
-            )
-          )}
 
-          {selectedMode === "round" && currentIndex !== null && round[currentIndex]?.file && (
-            <div>
-              <audio
-                ref={audioRef}
-                src={round[currentIndex].file}   // 👈 USES full Firebase URL directly
-                preload="auto"
-                autoPlay
-                onPlay={handlePlay}
-                onPause={handlePause}
-                onEnded={handleEnded}
-                onTimeUpdate={handleTimeUpdate}
-                onLoadedMetadata={handleLoadedMetadata}
-                onError={(e) => {
-                  console.error("Audio error:", e, "URL:", round[currentIndex].file);
-                }}
-              />
-
+              <div className="app-shell-column app-shell-column--right">
+                {selectedMode === "practice" && selectedStyle ? (
+                  <div className="practice-song-type-panel">
+                    {practiceDanceContent}
+                    <div className="practice-queue-panel">
+                      <h4 className="practice-queue-heading">Queue</h4>
+                      {practiceQueueContent}
+                    </div>
+                  </div>
+                ) : selectedMode === "round" ? (
+                  roundAuthBlocked ? (
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "0.75rem",
+                      }}
+                    >
+                      {round.length > 0 ? (
+                        <ul style={{ margin: 0, paddingLeft: "1.25rem" }}>
+                          {round.map((s, i) => (
+                            <li key={i}>{getDisplayName(s.file)}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p style={{ color: "#b5bac6", margin: 0 }}>
+                          Sign in to start this round.
+                        </p>
+                      )}
+                      <button
+                        onClick={() => {
+                          if (selectedStyle) {
+                            generateRound(selectedStyle);
+                          }
+                        }}
+                        disabled={
+                          !selectedStyle || !ENABLED_STYLE_IDS.has(selectedStyle) || roundAuthBlocked
+                        }
+                        className="neomorphus-button"
+                      >
+                        🔄 Reload Round
+                      </button>
+                    </div>
+                  ) : (
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "0.75rem",
+                      }}
+                    >
+                      {round.length > 0 ? (
+                        <ul style={{ margin: 0, paddingLeft: "1.25rem" }}>
+                          {round.map((s, i) => (
+                            <li
+                              key={i}
+                              style={{
+                                fontSize:
+                                  currentIndex === i && breakTimeLeft === null
+                                    ? ACTIVE_FONT_SIZE
+                                    : breakTimeLeft !== null && upcomingIndex === i
+                                    ? UPCOMING_FONT_SIZE
+                                    : undefined,
+                                color:
+                                  currentIndex === i && breakTimeLeft === null
+                                    ? HIGHLIGHT_COLOR
+                                    : breakTimeLeft !== null && upcomingIndex === i
+                                    ? HIGHLIGHT_COLOR
+                                    : undefined,
+                              }}
+                            >
+                              {getDisplayName(s.file)}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p style={{ color: "#b5bac6", margin: 0 }}>
+                          Generate a round to see the queue.
+                        </p>
+                      )}
+                      <button
+                        onClick={() => {
+                          if (selectedStyle) {
+                            generateRound(selectedStyle);
+                          }
+                        }}
+                        disabled={!selectedStyle || !ENABLED_STYLE_IDS.has(selectedStyle)}
+                        className="neomorphus-button"
+                      >
+                        🔄 Reload Round
+                      </button>
+                    </div>
+                  )
+                ) : null}
+              </div>
             </div>
-          )}
 
-          {selectedMode === "round" && breakTimeLeft !== null && (
-            <div>
-              <h3>Next song starts in: {breakTimeLeft} seconds</h3>
-            </div>
-          )}
+            {selectedMode === "round" && currentIndex !== null && round[currentIndex]?.file && (
+              <div>
+                <audio
+                  ref={audioRef}
+                  src={round[currentIndex].file}   // 👈 USES full Firebase URL directly
+                  preload="auto"
+                  autoPlay
+                  onPlay={handlePlay}
+                  onPause={handlePause}
+                  onEnded={handleEnded}
+                  onTimeUpdate={handleTimeUpdate}
+                  onLoadedMetadata={handleLoadedMetadata}
+                  onError={(e) => {
+                    console.error("Audio error:", e, "URL:", round[currentIndex].file);
+                  }}
+                />
+
+              </div>
+            )}
+          </div>
+
+          <div className="app-shell-footer">
+            {selectedMode === "practice" ? practiceTransportControls : roundTransportControls}
+          </div>
         </div>
       </div>
     </>
