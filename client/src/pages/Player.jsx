@@ -60,7 +60,7 @@ const SONG_STEP_SECONDS = 5;
 const DEFAULT_SONG_SECONDS = 90;
 const SPEED_MIN_PERCENT = 50;
 const SPEED_MAX_PERCENT = 120;
-const SPEED_STEP_PERCENT = 5;
+const SPEED_STEP_PERCENT = 1;
 const DEFAULT_SPEED_PERCENT = 100;
 const ACTIVE_FONT_SIZE = "1.5rem";
 const UPCOMING_FONT_SIZE = "1.25rem";
@@ -2440,7 +2440,7 @@ function Player() {
                       }
                     }}
                     disabled={!selectedStyle || !ENABLED_STYLE_IDS.has(selectedStyle)}
-                    className="neomorphus-button"
+                    className="neomorphus-button round-reload-button"
                   >
                     🔄
                   </button>

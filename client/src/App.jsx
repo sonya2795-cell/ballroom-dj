@@ -59,7 +59,7 @@ const SONG_STEP_SECONDS = 5;
 const DEFAULT_SONG_SECONDS = 90;
 const SPEED_MIN_PERCENT = 50;
 const SPEED_MAX_PERCENT = 120;
-const SPEED_STEP_PERCENT = 5;
+const SPEED_STEP_PERCENT = 1;
 const DEFAULT_SPEED_PERCENT = 100;
 const ACTIVE_FONT_SIZE = "1.5rem";
 const UPCOMING_FONT_SIZE = "1.25rem";
@@ -855,6 +855,47 @@ function PlayerApp() {
     }
   };
 
+  const getTrackTitle = (track) => {
+    if (!track) return "Unknown track";
+    const title = typeof track.title === "string" ? track.title.trim() : "";
+    return title || getDisplayName(track.file);
+  };
+
+  const getTrackArtist = (track) => {
+    if (!track) return "Unknown artist";
+    const artist = typeof track.artist === "string" ? track.artist.trim() : "";
+    return artist || "Unknown artist";
+  };
+
+  const getRoundDanceBadgeInfo = (track) => {
+    const normalized = (track?.danceId ?? track?.dance ?? "")
+      .toString()
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, "");
+
+    if (!normalized) return { label: "?", isFallback: true };
+
+    const badgeMap = {
+      chacha: "C",
+      samba: "S",
+      rumba: "R",
+      paso: "PD",
+      pasodoble: "PD",
+      jive: "J",
+      waltz: "W",
+      tango: "T",
+      viennesewaltz: "VW",
+      foxtrot: "F",
+      quickstep: "Q",
+    };
+
+    if (badgeMap[normalized]) return { label: badgeMap[normalized], isFallback: false };
+    if (normalized.startsWith("viennese")) return { label: "VW", isFallback: false };
+
+    return { label: "?", isFallback: true };
+  };
+
   const handleSkip = () => {
     const nextIndex = getNextIndex();
     if (nextIndex === null) return;
@@ -1588,22 +1629,6 @@ function PlayerApp() {
       >
         <div>
           <div className="slider-label-row">
-            <label htmlFor="break-duration-slider">Break Duration</label>
-            <span className="slider-value">{breakDurationSeconds} seconds</span>
-          </div>
-          <input
-            id="break-duration-slider"
-            type="range"
-            min={BREAK_MIN_SECONDS}
-            max={BREAK_MAX_SECONDS}
-            step={1}
-            value={breakDurationSeconds}
-            className="neomorphus-slider"
-            onChange={(e) => setBreakDurationSeconds(Number(e.target.value))}
-          />
-        </div>
-        <div>
-          <div className="slider-label-row">
             <label htmlFor="round-playback-speed-slider">Speed</label>
             <span className="slider-value">{roundPlaybackSpeedPercent}%</span>
           </div>
@@ -1676,6 +1701,24 @@ function PlayerApp() {
             </div>
           </div>
         ) : null}
+        {selectedMode === "round" && (
+          <div>
+            <div className="slider-label-row">
+              <label htmlFor="break-duration-slider">Break Duration</label>
+              <span className="slider-value">{breakDurationSeconds} seconds</span>
+            </div>
+            <input
+              id="break-duration-slider"
+              type="range"
+              min={BREAK_MIN_SECONDS}
+              max={BREAK_MAX_SECONDS}
+              step={1}
+              value={breakDurationSeconds}
+              className="neomorphus-slider"
+              onChange={(e) => setBreakDurationSeconds(Number(e.target.value))}
+            />
+          </div>
+        )}
         {selectedMode !== "practice" && (
           <div className="heat-controls">
             <div className="heat-mode-button-group">
@@ -1717,15 +1760,15 @@ function PlayerApp() {
         selectedMode === "round"
       ? (
           <div
-            style={{
-              width: "100%",
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              gap: "1rem",
-              marginTop: "1.5rem",
-            }}
-          >
+              style={{
+                width: "100%",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 0,
+                marginTop: "1.5rem",
+              }}
+            >
             <div
               style={{
                 width: "100%",
@@ -1837,15 +1880,15 @@ function PlayerApp() {
     selectedMode === "practice"
       ? (
           <div
-            style={{
-              width: "100%",
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              gap: "1rem",
-              marginTop: "1.5rem",
-            }}
-          >
+              style={{
+                width: "100%",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 0,
+                marginTop: "1.5rem",
+              }}
+            >
             <div
               style={{
                 width: "100%",
@@ -2105,27 +2148,21 @@ function PlayerApp() {
             <div className="app-shell-columns">
               <div className="app-shell-column app-shell-column--left">
                 {selectedStyle && (
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "0.75rem",
-                      marginTop: "1.5rem",
-                      marginBottom: "0.35rem",
-                    }}
-                  >
-                    {MODE_OPTIONS.map((mode) => (
-                      <button
-                        key={mode.id}
-                        type="button"
-                        className={`neomorphus-button mode-button${
-                          selectedMode === mode.id ? " active" : ""
-                        }`}
-                        onClick={() => handleModeChange(mode.id)}
-                      >
-                        {mode.label}
-                      </button>
-                    ))}
+                  <div className="mode-row">
+                    <div className="mode-button-group">
+                      {MODE_OPTIONS.map((mode) => (
+                        <button
+                          key={mode.id}
+                          type="button"
+                          className={`neomorphus-button mode-button${
+                            selectedMode === mode.id ? " active" : ""
+                          }`}
+                          onClick={() => handleModeChange(mode.id)}
+                        >
+                          {mode.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 )}
 
@@ -2190,31 +2227,50 @@ function PlayerApp() {
                 {selectedMode === "practice" && selectedStyle ? (
                   <div className="practice-song-type-panel">
                     {practiceDanceContent}
-                    <div className="practice-queue-panel">
-                      <h4 className="practice-queue-heading">Queue</h4>
-                      {practiceQueueContent}
+                    <div className="round-queue-wrapper">
+                      <h4 className="round-queue-heading">Queue</h4>
+                      <div className="round-queue-container">{practiceQueueContent}</div>
                     </div>
                   </div>
                 ) : selectedMode === "round" ? (
                   roundAuthBlocked ? (
-                    <div
-                      style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: "0.75rem",
-                      }}
-                    >
-                      {round.length > 0 ? (
-                        <ul style={{ margin: 0, paddingLeft: "1.25rem" }}>
-                          {round.map((s, i) => (
-                            <li key={i}>{getDisplayName(s.file)}</li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p style={{ color: "#b5bac6", margin: 0 }}>
-                          Sign in to start this round.
-                        </p>
-                      )}
+                    <div className="round-queue-wrapper">
+                      <h4 className="round-queue-heading">Queue</h4>
+                      <div className="round-queue-container">
+                        {round.length > 0 ? (
+                          <ul className="round-queue-list">
+                            {round.map((s, i) => (
+                              <li
+                                key={s.repeatQueueKey ?? s.id ?? s.file ?? i}
+                                className="round-queue-item"
+                              >
+                                {(() => {
+                                  const badge = getRoundDanceBadgeInfo(s);
+                                  return (
+                                    <div
+                                      className={`round-queue-item-art${
+                                        badge.isFallback ? " round-queue-item-art--fallback" : ""
+                                      }`}
+                                      aria-hidden="true"
+                                      title={badge.isFallback ? "Unknown dance" : undefined}
+                                    >
+                                      {badge.label}
+                                    </div>
+                                  );
+                                })()}
+                                <div className="round-queue-item-text">
+                                  <div className="round-queue-item-title">{getTrackTitle(s)}</div>
+                                  <div className="round-queue-item-artist">{getTrackArtist(s)}</div>
+                                </div>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p style={{ color: "#b5bac6", margin: 0 }}>
+                            Sign in to start this round.
+                          </p>
+                        )}
+                      </div>
                       <button
                         onClick={() => {
                           if (selectedStyle) {
@@ -2224,48 +2280,75 @@ function PlayerApp() {
                         disabled={
                           !selectedStyle || !ENABLED_STYLE_IDS.has(selectedStyle) || roundAuthBlocked
                         }
-                        className="neomorphus-button"
+                        className="neomorphus-button round-reload-button"
                       >
                         🔄 Reload Round
                       </button>
                     </div>
                   ) : (
-                    <div
-                      style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: "0.75rem",
-                      }}
-                    >
-                      {round.length > 0 ? (
-                        <ul style={{ margin: 0, paddingLeft: "1.25rem" }}>
-                          {round.map((s, i) => (
-                            <li
-                              key={i}
-                              style={{
-                                fontSize:
+                    <div className="round-queue-wrapper">
+                      <h4 className="round-queue-heading">Queue</h4>
+                      <div className="round-queue-container">
+                        {round.length > 0 ? (
+                          <ul className="round-queue-list">
+                            {round.map((s, i) => (
+                              <li
+                                key={s.repeatQueueKey ?? s.id ?? s.file ?? i}
+                                className={`round-queue-item${
                                   currentIndex === i && breakTimeLeft === null
-                                    ? ACTIVE_FONT_SIZE
-                                    : breakTimeLeft !== null && upcomingIndex === i
-                                    ? UPCOMING_FONT_SIZE
-                                    : undefined,
-                                color:
-                                  currentIndex === i && breakTimeLeft === null
-                                    ? HIGHLIGHT_COLOR
-                                    : breakTimeLeft !== null && upcomingIndex === i
-                                    ? HIGHLIGHT_COLOR
-                                    : undefined,
-                              }}
-                            >
-                              {getDisplayName(s.file)}
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p style={{ color: "#b5bac6", margin: 0 }}>
-                          Generate a round to see the queue.
-                        </p>
-                      )}
+                                    ? " round-queue-item--current"
+                                    : ""
+                                }${
+                                  breakTimeLeft !== null && upcomingIndex === i
+                                    ? " round-queue-item--upcoming"
+                                    : ""
+                                }`}
+                              >
+                                {(() => {
+                                  const badge = getRoundDanceBadgeInfo(s);
+                                  return (
+                                    <div
+                                      className={`round-queue-item-art${
+                                        badge.isFallback ? " round-queue-item-art--fallback" : ""
+                                      }`}
+                                      aria-hidden="true"
+                                      title={badge.isFallback ? "Unknown dance" : undefined}
+                                    >
+                                      {badge.label}
+                                    </div>
+                                  );
+                                })()}
+                                <div className="round-queue-item-text">
+                                  <div
+                                    className="round-queue-item-title"
+                                    style={{
+                                      fontSize:
+                                        currentIndex === i && breakTimeLeft === null
+                                          ? ACTIVE_FONT_SIZE
+                                          : breakTimeLeft !== null && upcomingIndex === i
+                                          ? UPCOMING_FONT_SIZE
+                                          : undefined,
+                                      color:
+                                        currentIndex === i && breakTimeLeft === null
+                                          ? HIGHLIGHT_COLOR
+                                          : breakTimeLeft !== null && upcomingIndex === i
+                                          ? HIGHLIGHT_COLOR
+                                          : undefined,
+                                    }}
+                                  >
+                                    {getTrackTitle(s)}
+                                  </div>
+                                  <div className="round-queue-item-artist">{getTrackArtist(s)}</div>
+                                </div>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p style={{ color: "#b5bac6", margin: 0 }}>
+                            Generate a round to see the queue.
+                          </p>
+                        )}
+                      </div>
                       <button
                         onClick={() => {
                           if (selectedStyle) {
@@ -2273,7 +2356,7 @@ function PlayerApp() {
                           }
                         }}
                         disabled={!selectedStyle || !ENABLED_STYLE_IDS.has(selectedStyle)}
-                        className="neomorphus-button"
+                        className="neomorphus-button round-reload-button"
                       >
                         🔄 Reload Round
                       </button>
