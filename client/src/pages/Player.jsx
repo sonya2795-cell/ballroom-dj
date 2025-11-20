@@ -1606,7 +1606,7 @@ function Player() {
     isPasoPracticeContext && hasPasoCrashMetadata
       ? (
           <div className="practice-paso-crash-buttons">
-            <span className="practice-paso-crash-heading">Crash Cutoff</span>
+            <span className="practice-paso-crash-heading">Paso Doble Crash</span>
             <div className="practice-paso-crash-button-group">
               {pasoCrashOptions.map((option) => (
                 <button
@@ -1948,10 +1948,10 @@ function Player() {
             alignItems: "center",
             width: "100%",
             gap: "0.75rem",
-            marginBottom: "1.5rem",
+            marginBottom: isPasoPracticeContext ? "0.75rem" : "1.5rem",
           }}
         >
-          <label htmlFor="break-duration-slider">
+          <label htmlFor="break-duration-slider" style={{ fontSize: "0.9rem" }}>
             Break Duration: {breakDurationSeconds} seconds
           </label>
           <input
@@ -1965,73 +1965,154 @@ function Player() {
             onChange={(e) => setBreakDurationSeconds(Number(e.target.value))}
           />
         </div>
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            width: "100%",
-            gap: "0.75rem",
-            marginBottom: "1.5rem",
-          }}
-        >
-          <label htmlFor="song-duration-slider">Song Duration: {formatTime(songDurationSeconds)}</label>
-          <input
-            id="song-duration-slider"
-            type="range"
-            min={SONG_MIN_SECONDS}
-            max={SONG_MAX_SECONDS}
-            step={SONG_STEP_SECONDS}
-            value={songDurationSeconds}
-            className="neomorphus-slider"
-            onChange={(e) => {
-              const nextValue = Number(e.target.value);
-              setSongDurationSeconds(nextValue);
-              if (isPlaying) {
-                schedulePlayTimeout(nextValue);
-              }
+        {isPasoPracticeContext ? (
+          <div
+            style={{
+              width: "100%",
+              display: "flex",
+              flexDirection: "column",
+              gap: "0.2rem",
             }}
-          />
-        </div>
-        {shouldShowCrashSelector ? (
-          <PasoCrashSelector
-            hasCrashMetadata={hasPasoCrashMetadata}
-            options={pasoCrashOptions}
-            selectedCrash={selectedCrash}
-            onChange={setSelectedCrash}
-            formatTime={formatTime}
-          />
-        ) : null}
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            width: "100%",
-            gap: "0.75rem",
-            marginBottom: "1.5rem",
-          }}
-        >
-          <label htmlFor="playback-speed-slider">Speed: {playbackSpeedPercent}%</label>
-          <input
-            id="playback-speed-slider"
-            type="range"
-            min={SPEED_MIN_PERCENT}
-            max={SPEED_MAX_PERCENT}
-            step={SPEED_STEP_PERCENT}
-            value={playbackSpeedPercent}
-            className="neomorphus-slider"
-            onChange={(e) => {
-              const nextValue = Number(e.target.value);
-              if (!Number.isFinite(nextValue)) {
-                return;
-              }
-              setPlaybackSpeedPercent(
-                Math.min(Math.max(nextValue, SPEED_MIN_PERCENT), SPEED_MAX_PERCENT),
-              );
+          >
+            <div>
+              <label htmlFor="song-duration-slider" style={{ fontSize: "0.9rem" }}>
+                Song Duration: {formatTime(songDurationSeconds)}
+              </label>
+              <input
+                id="song-duration-slider"
+                type="range"
+                min={SONG_MIN_SECONDS}
+                max={SONG_MAX_SECONDS}
+                step={SONG_STEP_SECONDS}
+                value={songDurationSeconds}
+                className="neomorphus-slider"
+                onChange={(e) => {
+                  const nextValue = Number(e.target.value);
+                  setSongDurationSeconds(nextValue);
+                  if (isPlaying) {
+                    schedulePlayTimeout(nextValue);
+                  }
+                }}
+              />
+            </div>
+        ) : (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              width: "100%",
+              gap: "0.75rem",
+              marginBottom: "1.5rem",
             }}
-          />
-        </div>
+          >
+            <label htmlFor="song-duration-slider" style={{ fontSize: "0.9rem" }}>
+              Song Duration: {formatTime(songDurationSeconds)}
+            </label>
+            <input
+              id="song-duration-slider"
+              type="range"
+              min={SONG_MIN_SECONDS}
+              max={SONG_MAX_SECONDS}
+              step={SONG_STEP_SECONDS}
+              value={songDurationSeconds}
+              className="neomorphus-slider"
+              onChange={(e) => {
+                const nextValue = Number(e.target.value);
+                setSongDurationSeconds(nextValue);
+                if (isPlaying) {
+                  schedulePlayTimeout(nextValue);
+                }
+              }}
+            />
+          </div>
+        )}
+        {isPasoPracticeContext ? (
+          <div
+            style={{
+              width: "100%",
+              display: "flex",
+              flexDirection: "column",
+              gap: "0.2rem",
+              marginBottom: "1.5rem",
+            }}
+          >
+            <div>
+              <PasoCrashSelector
+                hasCrashMetadata={hasPasoCrashMetadata}
+                options={pasoCrashOptions}
+                selectedCrash={selectedCrash}
+                onChange={setSelectedCrash}
+                formatTime={formatTime}
+                title="Paso Doble Crash"
+              />
+            </div>
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                width: "100%",
+                gap: "0.75rem",
+              }}
+            >
+              <label htmlFor="playback-speed-slider" style={{ fontSize: "0.9rem" }}>
+                Speed: {playbackSpeedPercent}%
+              </label>
+              <input
+                id="playback-speed-slider"
+                type="range"
+                min={SPEED_MIN_PERCENT}
+                max={SPEED_MAX_PERCENT}
+                step={SPEED_STEP_PERCENT}
+                value={playbackSpeedPercent}
+                className="neomorphus-slider"
+                onChange={(e) => {
+                  const nextValue = Number(e.target.value);
+                  if (!Number.isFinite(nextValue)) {
+                    return;
+                  }
+                  setPlaybackSpeedPercent(
+                    Math.min(Math.max(nextValue, SPEED_MIN_PERCENT), SPEED_MAX_PERCENT),
+                  );
+                }}
+              />
+            </div>
+          </div>
+        ) : (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              width: "100%",
+              gap: "0.75rem",
+              marginBottom: "1.5rem",
+            }}
+          >
+            <label htmlFor="playback-speed-slider" style={{ fontSize: "0.9rem" }}>
+              Speed: {playbackSpeedPercent}%
+            </label>
+            <input
+              id="playback-speed-slider"
+              type="range"
+              min={SPEED_MIN_PERCENT}
+              max={SPEED_MAX_PERCENT}
+              step={SPEED_STEP_PERCENT}
+              value={playbackSpeedPercent}
+              className="neomorphus-slider"
+              onChange={(e) => {
+                const nextValue = Number(e.target.value);
+                if (!Number.isFinite(nextValue)) {
+                  return;
+                }
+                setPlaybackSpeedPercent(
+                  Math.min(Math.max(nextValue, SPEED_MIN_PERCENT), SPEED_MAX_PERCENT),
+                );
+              }}
+            />
+          </div>
+        )}
         <div
           style={{
             display: "flex",

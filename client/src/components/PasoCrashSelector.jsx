@@ -4,6 +4,7 @@ function PasoCrashSelector({
   selectedCrash = null,
   onChange,
   formatTime,
+  title = "Crash Cutoff",
 }) {
   if (!hasCrashMetadata) {
     return (
@@ -32,7 +33,7 @@ function PasoCrashSelector({
         maxWidth: "420px",
       }}
     >
-      <span style={{ fontWeight: 600 }}>Crash Cutoff</span>
+      <span style={{ fontWeight: 600, fontSize: "0.9rem" }}>{title}</span>
       <div
         style={{
           display: "flex",
@@ -47,6 +48,7 @@ function PasoCrashSelector({
             alignItems: "center",
             gap: "0.35rem",
             cursor: "pointer",
+            fontSize: "0.9rem",
           }}
         >
           <input
@@ -66,6 +68,7 @@ function PasoCrashSelector({
               alignItems: "center",
               gap: "0.35rem",
               cursor: "pointer",
+              fontSize: "0.9rem",
             }}
           >
             <input

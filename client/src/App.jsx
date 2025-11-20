@@ -867,31 +867,52 @@ function PlayerApp() {
     return artist || "Unknown artist";
   };
 
-  const getRoundDanceBadgeInfo = (track) => {
-    const normalized = (track?.danceId ?? track?.dance ?? "")
-      .toString()
-      .trim()
-      .toLowerCase()
-      .replace(/\s+/g, "");
-
-    if (!normalized) return { label: "?", isFallback: true };
-
+  const getRoundDanceBadgeInfo = (track, fallbackDance) => {
     const badgeMap = {
       chacha: "C",
+      cha: "C",
       samba: "S",
       rumba: "R",
+      rhumba: "R",
       paso: "PD",
       pasodoble: "PD",
+      pd: "PD",
       jive: "J",
       waltz: "W",
+      w: "W",
       tango: "T",
+      t: "T",
       viennesewaltz: "VW",
+      vienesewaltz: "VW", // guard against common misspelling
+      viennese: "VW",
+      vienese: "VW",
+      vw: "VW",
       foxtrot: "F",
+      fox: "F",
       quickstep: "Q",
+      qs: "Q",
+      quick: "Q",
     };
 
-    if (badgeMap[normalized]) return { label: badgeMap[normalized], isFallback: false };
-    if (normalized.startsWith("viennese")) return { label: "VW", isFallback: false };
+    const candidates = [
+      track?.danceId,
+      track?.dance,
+      track?.danceKey,
+      track?.danceLabel,
+      track?.folder,
+      fallbackDance,
+    ];
+
+    for (const key of candidates) {
+      if (!key) continue;
+      const normalized = key
+        .toString()
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z]/g, "");
+      if (!normalized) continue;
+      if (badgeMap[normalized]) return { label: badgeMap[normalized], isFallback: false };
+    }
 
     return { label: "?", isFallback: true };
   };
@@ -1437,22 +1458,34 @@ function PlayerApp() {
     }
     return "Practice not loaded yet";
   })();
+  const practiceDanceRows = useMemo(() => {
+    if (!practiceDances.length) return [];
+    const midpoint = Math.ceil(practiceDances.length / 2);
+    return [practiceDances.slice(0, midpoint), practiceDances.slice(midpoint)].filter(
+      (row) => row.length > 0,
+    );
+  }, [practiceDances]);
+
   const practiceDanceButtonsMarkup =
-    practiceDances.length > 0
+    practiceDanceRows.length > 0
       ? (
-          <div className="practice-dance-button-group">
-            {practiceDances.map((dance) => (
-              <button
-                key={dance.id}
-                type="button"
-                className={`neomorphus-button${
-                  practicePlaylist?.danceId === dance.id ? " active" : ""
-                }`}
-                disabled={practiceLoadingDance === dance.id || practiceDancesLoading}
-                onClick={() => handlePracticeRequest(dance.id)}
-              >
-                {practiceLoadingDance === dance.id ? "Loading..." : dance.label}
-              </button>
+          <div className="practice-dance-button-group practice-dance-button-group--two-rows">
+            {practiceDanceRows.map((row, rowIndex) => (
+              <div key={`practice-dance-row-${rowIndex}`} className="practice-dance-button-row">
+                {row.map((dance) => (
+                  <button
+                    key={dance.id}
+                    type="button"
+                    className={`neomorphus-button${
+                      practicePlaylist?.danceId === dance.id ? " active" : ""
+                    }`}
+                    disabled={practiceLoadingDance === dance.id || practiceDancesLoading}
+                    onClick={() => handlePracticeRequest(dance.id)}
+                  >
+                    {practiceLoadingDance === dance.id ? "Loading..." : dance.label}
+                  </button>
+                ))}
+              </div>
             ))}
           </div>
         )
@@ -1466,17 +1499,35 @@ function PlayerApp() {
   const practiceQueueContent =
     practicePlaylist?.tracks?.length
       ? (
-          <ol className="practice-queue-list">
-            {practicePlaylist.tracks.map((track, idx) => (
-              <li
-                key={track.id ?? track.file ?? idx}
-                className={idx === practiceTrackIndex ? "practice-queue-item practice-queue-item--active" : "practice-queue-item"}
-              >
-                {getDisplayName(track.file)}
-                {idx === practiceTrackIndex ? " (current)" : ""}
-              </li>
-            ))}
-          </ol>
+          <ul className="round-queue-list">
+            {practicePlaylist.tracks.map((track, idx) => {
+              const badge = getRoundDanceBadgeInfo(
+                track,
+                practicePlaylist?.danceId || practicePlaylist?.dance
+              );
+              const isActive = idx === practiceTrackIndex;
+              return (
+                <li
+                  key={track.id ?? track.file ?? idx}
+                  className={`round-queue-item${isActive ? " round-queue-item--current" : ""}`}
+                >
+                  <div
+                    className={`round-queue-item-art${
+                      badge.isFallback ? " round-queue-item-art--fallback" : ""
+                    }`}
+                    aria-hidden="true"
+                    title={badge.isFallback ? "Unknown dance" : undefined}
+                  >
+                    {badge.label}
+                  </div>
+                  <div className="round-queue-item-text">
+                    <div className="round-queue-item-title">{getTrackTitle(track)}</div>
+                    <div className="round-queue-item-artist">{getTrackArtist(track)}</div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
         )
       : (
           <p className="practice-queue-empty">
@@ -1487,7 +1538,7 @@ function PlayerApp() {
     isPasoPracticeContext && hasPasoCrashMetadata
       ? (
           <div className="practice-paso-crash-buttons">
-            <span className="practice-paso-crash-heading">Crash Cutoff</span>
+            <span className="practice-paso-crash-heading">Paso Doble Crash</span>
             <div className="practice-paso-crash-button-group">
               {pasoCrashOptions.map((option) => (
                 <button
@@ -1627,29 +1678,38 @@ function PlayerApp() {
           width: "100%",
         }}
       >
-        <div>
-          <div className="slider-label-row">
-            <label htmlFor="round-playback-speed-slider">Speed</label>
-            <span className="slider-value">{roundPlaybackSpeedPercent}%</span>
+        <div
+          style={
+            isPasoPracticeContext
+              ? { display: "flex", flexDirection: "column", gap: "0.7rem" }
+              : undefined
+          }
+        >
+          <div>
+            <div className="slider-label-row">
+              <label htmlFor="round-playback-speed-slider">Speed</label>
+              <span className="slider-value">{roundPlaybackSpeedPercent}%</span>
+            </div>
+            <input
+              id="round-playback-speed-slider"
+              type="range"
+              min={SPEED_MIN_PERCENT}
+              max={SPEED_MAX_PERCENT}
+              step={SPEED_STEP_PERCENT}
+              value={roundPlaybackSpeedPercent}
+              className="neomorphus-slider"
+              onChange={(e) => {
+                const nextValue = Number(e.target.value);
+                if (!Number.isFinite(nextValue)) {
+                  return;
+                }
+                setRoundPlaybackSpeedPercent(
+                  Math.min(Math.max(nextValue, SPEED_MIN_PERCENT), SPEED_MAX_PERCENT),
+                );
+              }}
+            />
           </div>
-          <input
-            id="round-playback-speed-slider"
-            type="range"
-            min={SPEED_MIN_PERCENT}
-            max={SPEED_MAX_PERCENT}
-            step={SPEED_STEP_PERCENT}
-            value={roundPlaybackSpeedPercent}
-            className="neomorphus-slider"
-            onChange={(e) => {
-              const nextValue = Number(e.target.value);
-              if (!Number.isFinite(nextValue)) {
-                return;
-              }
-              setRoundPlaybackSpeedPercent(
-                Math.min(Math.max(nextValue, SPEED_MIN_PERCENT), SPEED_MAX_PERCENT),
-             );
-            }}
-          />
+          {isPasoPracticeContext ? pasoPracticeCrashButtonsMarkup : null}
         </div>
         {!isPasoPracticeContext && (
           <div>
@@ -2173,7 +2233,6 @@ function PlayerApp() {
                     <div style={{ marginTop: "1rem" }}>
                       {practiceError && <p style={{ color: "#ff8080" }}>{practiceError}</p>}
                       {practiceDancesLoading && !practiceError && <p>Loading dances...</p>}
-                      {pasoPracticeCrashButtonsMarkup}
                       {practicePlaylist?.danceId?.toLowerCase() === "chacha" && null}
 
                       {currentPracticeTrack && currentPracticeTrack.file && (
@@ -2221,12 +2280,19 @@ function PlayerApp() {
                     <h3>Next song starts in: {breakTimeLeft} seconds</h3>
                   </div>
                 )}
+
+                {selectedMode === "practice" &&
+                  selectedStyle &&
+                  ENABLED_STYLE_IDS.has(selectedStyle) && (
+                    <div className="practice-song-type-panel practice-song-type-panel--left">
+                      {practiceDanceContent}
+                    </div>
+                  )}
               </div>
 
               <div className="app-shell-column app-shell-column--right">
                 {selectedMode === "practice" && selectedStyle ? (
                   <div className="practice-song-type-panel">
-                    {practiceDanceContent}
                     <div className="round-queue-wrapper">
                       <h4 className="round-queue-heading">Queue</h4>
                       <div className="round-queue-container">{practiceQueueContent}</div>
@@ -2245,7 +2311,7 @@ function PlayerApp() {
                                 className="round-queue-item"
                               >
                                 {(() => {
-                                  const badge = getRoundDanceBadgeInfo(s);
+                                  const badge = getRoundDanceBadgeInfo(s, selectedStyle);
                                   return (
                                     <div
                                       className={`round-queue-item-art${
@@ -2305,7 +2371,7 @@ function PlayerApp() {
                                 }`}
                               >
                                 {(() => {
-                                  const badge = getRoundDanceBadgeInfo(s);
+                                  const badge = getRoundDanceBadgeInfo(s, selectedStyle);
                                   return (
                                     <div
                                       className={`round-queue-item-art${
