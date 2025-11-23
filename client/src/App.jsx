@@ -67,6 +67,78 @@ const BACKGROUND_COLOR = "#30333a";
 const TEXT_COLOR = "#f2f4f7";
 const HIGHLIGHT_COLOR = "#25ed75";
 
+function PlayIcon({ className = "" }) {
+  return (
+    <svg
+      className={`round-control-icon${className ? ` ${className}` : ""}`}
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
+    </svg>
+  );
+}
+
+function PauseIcon({ className = "" }) {
+  return (
+    <svg
+      className={`round-control-icon${className ? ` ${className}` : ""}`}
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M15.75 5.25v13.5m-7.5-13.5v13.5" />
+    </svg>
+  );
+}
+
+function NextIcon({ className = "" }) {
+  return (
+    <svg
+      className={`round-control-icon${className ? ` ${className}` : ""}`}
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+    </svg>
+  );
+}
+
+function PreviousIcon({ className = "" }) {
+  return (
+    <svg
+      className={`round-control-icon${className ? ` ${className}` : ""}`}
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M15.75 19.5 8.25 12l7.5-7.5" />
+    </svg>
+  );
+}
+
 function buildExpandedRound(songs, repeatCount) {
   if (!Array.isArray(songs) || repeatCount <= 0) {
     return [];
@@ -136,6 +208,7 @@ function PlayerApp() {
   const [roundHeatMode, setRoundHeatMode] = useState(DEFAULT_HEAT_MODE);
   const [currentIndex, setCurrentIndex] = useState(null);
   const [breakTimeLeft, setBreakTimeLeft] = useState(null);
+  const [isBreakPaused, setIsBreakPaused] = useState(false);
   const [upcomingIndex, setUpcomingIndex] = useState(null);
   const [selectedStyle, setSelectedStyle] = useState(null);
   const [selectedMode, setSelectedMode] = useState(null);
@@ -226,6 +299,7 @@ function PlayerApp() {
   const fadeTimeoutRef = useRef(null);
   const fadeIntervalRef = useRef(null);
   const breakIntervalRef = useRef(null);
+  const breakCountdownRef = useRef(null);
   const activationAudioRef = useRef(null);
   const hasPrimedAudioRef = useRef(false);
   const practiceAudioRef = useRef(null);
@@ -306,6 +380,49 @@ function PlayerApp() {
     }
   }, []);
 
+  const resetBreakState = useCallback(() => {
+    clearBreakInterval();
+    breakCountdownRef.current = null;
+    setBreakTimeLeft(null);
+    setUpcomingIndex(null);
+    setIsBreakPaused(false);
+  }, [clearBreakInterval]);
+
+  const startBreakCountdown = useCallback(
+    (nextIndex) => {
+      if (nextIndex === null) {
+        resetBreakState();
+        setCurrentIndex(null);
+        setCurrentTime(0);
+        setDuration(0);
+        setIsPlaying(false);
+        advancingRef.current = false;
+        return;
+      }
+
+      clearBreakInterval();
+      breakIntervalRef.current = setInterval(() => {
+        if (breakCountdownRef.current === null) {
+          clearBreakInterval();
+          return;
+        }
+
+        breakCountdownRef.current = Math.max(breakCountdownRef.current - 1, 0);
+        setBreakTimeLeft(breakCountdownRef.current);
+
+        if (breakCountdownRef.current <= 0) {
+          resetBreakState();
+          setCurrentIndex(nextIndex);
+          setCurrentTime(0);
+          setDuration(0);
+          setIsPlaying(false);
+          advancingRef.current = false;
+        }
+      }, 1000);
+    },
+    [clearBreakInterval, resetBreakState],
+  );
+
   const startFadeOut = (fadeDurationMs) => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -377,16 +494,14 @@ function PlayerApp() {
       audioRef.current.currentTime = 0;
     }
 
-    clearBreakInterval();
+    resetBreakState();
     clearPlayTimeout();
     clearFadeTimers({ resetVolume: true });
     setIsPlaying(false);
     setCurrentIndex(null);
-    setBreakTimeLeft(null);
-    setUpcomingIndex(null);
     setCurrentTime(0);
     setDuration(0);
-  }, [clearBreakInterval, clearFadeTimers, clearPlayTimeout]);
+  }, [clearFadeTimers, clearPlayTimeout, resetBreakState]);
 
   const resetPracticeState = () => {
     if (practiceAudioRef.current) {
@@ -502,39 +617,23 @@ function PlayerApp() {
     const nextIndex = getNextIndex();
 
     if (nextIndex === null) {
-      clearBreakInterval();
+      resetBreakState();
       setCurrentIndex(null);
-      setBreakTimeLeft(null);
       setIsPlaying(false);
       setCurrentTime(0);
       setDuration(0);
-      setUpcomingIndex(null);
       advancingRef.current = false;
       return;
     }
 
     advancingRef.current = true;
-    clearBreakInterval();
+    resetBreakState();
 
-    let countdown = breakDurationSeconds;
-    setBreakTimeLeft(countdown);
+    breakCountdownRef.current = breakDurationSeconds;
+    setBreakTimeLeft(breakCountdownRef.current);
     setUpcomingIndex(nextIndex);
-
-    breakIntervalRef.current = setInterval(() => {
-      countdown -= 1;
-      setBreakTimeLeft(Math.max(countdown, 0));
-
-      if (countdown <= 0) {
-        clearBreakInterval();
-        setBreakTimeLeft(null);
-        setCurrentIndex(nextIndex);
-        setCurrentTime(0);
-        setDuration(0);
-        setIsPlaying(false);
-        setUpcomingIndex(null);
-        advancingRef.current = false;
-      }
-    }, 1000);
+    setIsBreakPaused(false);
+    startBreakCountdown(nextIndex);
   };
 
   // Fetch a new round for the selected style
@@ -575,7 +674,7 @@ function PlayerApp() {
         }
 
         pendingRoundStyleRef.current = null;
-        clearBreakInterval();
+        resetBreakState();
         clearPlayTimeout();
         setRoundAuthBlocked(false);
         const normalizedData = Array.isArray(data) ? data : [];
@@ -585,17 +684,15 @@ function PlayerApp() {
         });
         setRoundSource(normalizedData);
         setCurrentIndex(null);
-        setBreakTimeLeft(null);
         setIsPlaying(false);
         setCurrentTime(0);
         setDuration(0);
-        setUpcomingIndex(null);
         advancingRef.current = false;
       } catch (error) {
         console.error("Error fetching round:", error);
       }
     },
-    [clearBreakInterval, clearPlayTimeout, roundSource.length, selectedStyle]
+    [clearPlayTimeout, resetBreakState, roundSource.length, selectedStyle]
   );
 
   useEffect(() => {
@@ -629,7 +726,7 @@ function PlayerApp() {
       audioRef.current.volume = 1.0;
       audioRef.current.playbackRate = roundPlaybackRate;
     }
-    setBreakTimeLeft(null);
+    resetBreakState();
     setIsPlaying(true);
     schedulePlayTimeout(getRoundDurationLimitSeconds(currentSong));
   };
@@ -717,6 +814,57 @@ function PlayerApp() {
       }
     }
   };
+
+  const handleRoundReloadClick = useCallback(() => {
+    const state = {
+      selectedStyle,
+      isEnabledStyle:
+        selectedStyle != null ? ENABLED_STYLE_IDS.has(selectedStyle) : false,
+      roundAuthBlocked,
+    };
+
+    if (!state.selectedStyle) {
+      console.debug("[round-button] click ignored - no style selected", state);
+      return;
+    }
+
+    if (!state.isEnabledStyle) {
+      console.debug("[round-button] click ignored - style not enabled", state);
+      return;
+    }
+
+    if (state.roundAuthBlocked) {
+      console.debug("[round-button] click ignored - auth blocked", state);
+      return;
+    }
+
+    console.debug("[round-button] click accepted", state);
+    generateRound(state.selectedStyle);
+  }, [generateRound, roundAuthBlocked, selectedStyle]);
+
+  useEffect(() => {
+    if (selectedMode !== "round") return;
+
+    const disableReasons = [];
+
+    if (!selectedStyle) {
+      disableReasons.push("no-style-selected");
+    } else if (!ENABLED_STYLE_IDS.has(selectedStyle)) {
+      disableReasons.push("style-not-enabled");
+    }
+
+    if (roundAuthBlocked) {
+      disableReasons.push("auth-blocked");
+    }
+
+    console.debug("[round-button] availability", {
+      selectedStyle,
+      isEnabledStyle:
+        selectedStyle != null ? ENABLED_STYLE_IDS.has(selectedStyle) : false,
+      roundAuthBlocked,
+      disableReasons,
+    });
+  }, [roundAuthBlocked, selectedMode, selectedStyle]);
 
   const handleSelectHeatMode = useCallback(
     (modeId) => {
@@ -919,7 +1067,40 @@ function PlayerApp() {
 
   const handleSkip = () => {
     const nextIndex = getNextIndex();
-    if (nextIndex === null) return;
+
+    if (breakTimeLeft === null) {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      }
+
+      clearPlayTimeout();
+      clearFadeTimers({ resetVolume: true });
+      setIsPlaying(false);
+
+      if (nextIndex === null) {
+        resetBreakState();
+        setCurrentIndex(null);
+        setCurrentTime(0);
+        setDuration(0);
+        advancingRef.current = false;
+      } else {
+        startBreakThenNext();
+      }
+
+      return;
+    }
+
+    const targetIndex = upcomingIndex !== null ? upcomingIndex : nextIndex;
+    if (targetIndex === null) {
+      resetBreakState();
+      setCurrentIndex(null);
+      setCurrentTime(0);
+      setDuration(0);
+      setIsPlaying(false);
+      advancingRef.current = false;
+      return;
+    }
 
     if (audioRef.current) {
       audioRef.current.pause();
@@ -927,14 +1108,12 @@ function PlayerApp() {
     }
 
     clearPlayTimeout();
-    clearBreakInterval();
+    resetBreakState();
     clearFadeTimers({ resetVolume: true });
 
     advancingRef.current = false;
-    setBreakTimeLeft(null);
-    setUpcomingIndex(null);
     setIsPlaying(false);
-    setCurrentIndex(nextIndex);
+    setCurrentIndex(targetIndex);
     setCurrentTime(0);
     setDuration(0);
   };
@@ -949,12 +1128,10 @@ function PlayerApp() {
     }
 
     clearPlayTimeout();
-    clearBreakInterval();
+    resetBreakState();
     clearFadeTimers({ resetVolume: true });
 
     advancingRef.current = false;
-    setBreakTimeLeft(null);
-    setUpcomingIndex(null);
     setIsPlaying(false);
     setCurrentIndex(previousIndex);
     setCurrentTime(0);
@@ -990,31 +1167,25 @@ function PlayerApp() {
     clearAuthPromptTimeout();
 
     if (breakTimeLeft !== null) {
-      const targetIndex =
-        upcomingIndex !== null ? upcomingIndex : getNextIndex();
-
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.currentTime = 0;
-      }
-
-      clearPlayTimeout();
-      clearBreakInterval();
-      clearFadeTimers({ resetVolume: true });
-      advancingRef.current = false;
-
-      setBreakTimeLeft(null);
-      setUpcomingIndex(null);
-      setIsPlaying(false);
-
-      if (targetIndex !== null) {
-        setCurrentIndex(targetIndex);
-        setCurrentTime(0);
-        setDuration(0);
+      if (!isBreakPaused) {
+        clearBreakInterval();
+        setIsBreakPaused(true);
       } else {
-        setCurrentIndex(null);
-        setCurrentTime(0);
-        setDuration(0);
+        const targetIndex =
+          upcomingIndex !== null ? upcomingIndex : getNextIndex();
+
+        if (targetIndex === null) {
+          resetBreakState();
+          setCurrentIndex(null);
+          setCurrentTime(0);
+          setDuration(0);
+          advancingRef.current = false;
+        } else {
+          breakCountdownRef.current =
+            breakCountdownRef.current ?? Math.max(breakTimeLeft, 0);
+          setIsBreakPaused(false);
+          startBreakCountdown(targetIndex);
+        }
       }
 
       return;
@@ -1562,25 +1733,35 @@ function PlayerApp() {
   const nextIndexCandidate = getNextIndex();
   const canGoPrevious = previousIndexCandidate !== null;
   const canGoNext = nextIndexCandidate !== null;
-  const startButtonLabel = isPlaying
+  const isBreakActive = breakTimeLeft !== null;
+  const isBreakCountingDown = isBreakActive && !isBreakPaused;
+  const isPlaybackEngaged = isPlaying || isBreakCountingDown;
+  const startButtonLabel = isBreakActive
+    ? isBreakPaused
+      ? "Resume Break"
+      : "Pause Break"
+    : isPlaying
     ? "Pause Round"
-    : breakTimeLeft !== null
-    ? "Resume Round"
     : currentIndex === null
     ? "Start Round"
     : "Play Round";
-  const startButtonIcon = isPlaying
-    ? "⏸️"
-    : breakTimeLeft !== null
-    ? "⏯️"
-    : "▶️";
-  const startButtonAriaLabel = isPlaying
+  const startButtonIcon = isPlaybackEngaged ? (
+    <PauseIcon className="round-control-icon--primary" />
+  ) : (
+    <PlayIcon className="round-control-icon--primary" />
+  );
+  const startButtonAriaLabel = isBreakActive
+    ? isBreakPaused
+      ? "Resume break countdown"
+      : "Pause break countdown"
+    : isPlaying
     ? "Pause round playback"
-    : breakTimeLeft !== null
-    ? "Resume round playback"
     : "Start round playback";
   const isStartDisabled =
-    round.length === 0 && !roundAuthBlocked && !pendingRoundStyleRef.current;
+    !isBreakActive &&
+    round.length === 0 &&
+    !roundAuthBlocked &&
+    !pendingRoundStyleRef.current;
   const currentSong = currentIndex !== null ? round[currentIndex] : null;
   const upcomingSong = upcomingIndex !== null ? round[upcomingIndex] : null;
   const roundDurationLimitSeconds = getRoundDurationLimitSeconds(currentSong);
@@ -1901,36 +2082,36 @@ function PlayerApp() {
                 flexWrap: "wrap",
               }}
             >
-              <button
-                type="button"
-                className="neomorphus-button round-control"
-                onClick={handlePrevious}
-                disabled={!canGoPrevious}
-                aria-label="Previous Song"
-                title="Previous Song"
-              >
-                ⏮️
-              </button>
-              <button
-                type="button"
-                className="neomorphus-button round-control"
-                onClick={handleTogglePlayback}
-                disabled={isStartDisabled}
-                aria-label={startButtonAriaLabel}
-                title={startButtonLabel}
-              >
+            <button
+              type="button"
+              className="neomorphus-button round-control"
+              onClick={handlePrevious}
+              disabled={!canGoPrevious}
+              aria-label="Previous Song"
+              title="Previous Song"
+            >
+              <PreviousIcon />
+            </button>
+            <button
+              type="button"
+              className="neomorphus-button round-control round-control--primary"
+              onClick={handleTogglePlayback}
+              disabled={isStartDisabled}
+              aria-label={startButtonAriaLabel}
+              title={startButtonLabel}
+            >
                 {startButtonIcon}
               </button>
-              <button
-                type="button"
-                className="neomorphus-button round-control"
-                onClick={handleSkip}
-                disabled={!canGoNext}
-                aria-label="Next Song"
-                title="Next Song"
-              >
-                ⏭️
-              </button>
+            <button
+              type="button"
+              className="neomorphus-button round-control"
+              onClick={handleSkip}
+              disabled={!canGoNext}
+              aria-label="Next Song"
+              title="Next Song"
+            >
+              <NextIcon />
+            </button>
             </div>
           </div>
         )
@@ -2019,16 +2200,16 @@ function PlayerApp() {
                 flexWrap: "wrap",
               }}
             >
-              <button
-                type="button"
-                className="neomorphus-button round-control"
-                onClick={handlePracticePrevious}
-                disabled={!practiceCanGoPrevious}
-                aria-label="Previous Practice Track"
-                title="Previous Practice Track"
-              >
-                ⏮️
-              </button>
+            <button
+              type="button"
+              className="neomorphus-button round-control"
+              onClick={handlePracticePrevious}
+              disabled={!practiceCanGoPrevious}
+              aria-label="Previous Practice Track"
+              title="Previous Practice Track"
+            >
+              <PreviousIcon />
+            </button>
               <button
                 type="button"
                 className="neomorphus-button round-control"
@@ -2039,16 +2220,16 @@ function PlayerApp() {
               >
                 {practiceIsPlaying ? "⏸️" : "▶️"}
               </button>
-              <button
-                type="button"
-                className="neomorphus-button round-control"
-                onClick={handlePracticeTrackCompletion}
-                disabled={!practicePlaylistLength}
-                aria-label="Next Practice Track"
-                title="Next Practice Track"
-              >
-                ⏭️
-              </button>
+            <button
+              type="button"
+              className="neomorphus-button round-control"
+              onClick={handlePracticeTrackCompletion}
+              disabled={!practicePlaylistLength}
+              aria-label="Next Practice Track"
+              title="Next Practice Track"
+            >
+              <NextIcon />
+            </button>
             </div>
           </div>
         )
@@ -2134,7 +2315,9 @@ function PlayerApp() {
         onRetry={() => clearAuthError()}
       />
       <header className="app-header">
-        <h1 className="app-title app-title-floating">Ballroom DJ</h1>
+        <h1 className="app-title app-title-floating">
+          Muzon App<span className="app-subtitle"> - Ballroom DJ</span>
+        </h1>
         {isAuthenticated ? (
           <div className="app-menu-bar" ref={authMenuContainerRef}>
             <button
@@ -2338,11 +2521,7 @@ function PlayerApp() {
                         )}
                       </div>
                       <button
-                        onClick={() => {
-                          if (selectedStyle) {
-                            generateRound(selectedStyle);
-                          }
-                        }}
+                        onClick={handleRoundReloadClick}
                         disabled={
                           !selectedStyle || !ENABLED_STYLE_IDS.has(selectedStyle) || roundAuthBlocked
                         }
@@ -2416,11 +2595,7 @@ function PlayerApp() {
                         )}
                       </div>
                       <button
-                        onClick={() => {
-                          if (selectedStyle) {
-                            generateRound(selectedStyle);
-                          }
-                        }}
+                        onClick={handleRoundReloadClick}
                         disabled={!selectedStyle || !ENABLED_STYLE_IDS.has(selectedStyle)}
                         className="neomorphus-button round-reload-button"
                       >

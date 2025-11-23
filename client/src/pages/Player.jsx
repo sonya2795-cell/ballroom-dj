@@ -2232,7 +2232,9 @@ function Player() {
           </button>
         </div>
       )}
-      <h1 className="app-title app-title-floating">Ballroom DJ</h1>
+      <h1 className="app-title app-title-floating">
+        Muzon App<span className="app-subtitle"> - Ballroom DJ</span>
+      </h1>
 
       <div
         ref={preStyleFlashRef}

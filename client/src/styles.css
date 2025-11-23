@@ -98,6 +98,14 @@ textarea {
   padding-top: 0.75rem;
   padding-left: 0.5rem;
   padding-right: 0.5rem;
+  pointer-events: none;
+}
+
+.app-shell-footer button,
+.app-shell-footer .neomorphus-button,
+.app-shell-footer .round-progress,
+.app-shell-footer .round-progress-thumb {
+  pointer-events: auto;
 }
 
 .audio-control-container {
@@ -174,8 +182,13 @@ textarea {
 .app-title {
   font-family: 'Quicksand', sans-serif;
   font-weight: 400;
-  font-size: calc(var(--text-xl) * 0.5);
+  font-size: calc(var(--text-xl) * 0.35);
   margin: 0 0 1.5rem;
+}
+
+.app-title .app-subtitle {
+  font-size: 0.65em;
+  font-weight: 300;
 }
 
 .app-title-floating {
@@ -192,7 +205,7 @@ textarea {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding: 0.855rem 1.5rem;
+  padding: 0.5985rem 1.05rem;
   background-color: #30333a;
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
 }
@@ -217,15 +230,19 @@ textarea {
 }
 
 .neomorphus-button.round-control {
-  width: 56px;
-  height: 56px;
-  min-width: 56px;
+  width: 39.2px;
+  height: 39.2px;
+  min-width: 39.2px;
   border-radius: 50%;
   padding: 0;
-  font-size: 1.35rem;
-  line-height: 1;
   background-color: #30333a;
   color: #25ed75;
+}
+
+.neomorphus-button.round-control.round-control--primary {
+  width: 51px;
+  height: 51px;
+  min-width: 51px;
 }
 
 .neomorphus-button.round-control:disabled {
@@ -239,23 +256,35 @@ textarea {
   box-shadow: 4px 4px 6px #131417, -4px -4px 6px #4d525d;
 }
 
+.round-control-icon {
+  width: 16.8px;
+  height: 16.8px;
+  color: #f6f8fb;
+  pointer-events: none;
+}
+
+.round-control-icon--primary {
+  width: 21.84px;
+  height: 21.84px;
+}
+
 .neomorphus-button.playback-toggle-button {
   padding: 0;
-  width: 60px;
-  height: 60px;
-  min-width: 60px;
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
   border-radius: 50%;
-  font-size: 1.35rem;
+  font-size: 1.08rem;
   line-height: 1;
 }
 
 .neomorphus-button.playback-round-button {
   padding: 0;
-  width: 44px;
-  height: 40px;
-  min-width: 44px;
+  width: 35.2px;
+  height: 32px;
+  min-width: 35.2px;
   border-radius: 50%;
-  font-size: 1rem;
+  font-size: 0.8rem;
   line-height: 1;
 }
 
@@ -271,7 +300,7 @@ textarea {
     inset 3px 3px 6px #21232a,
     inset -3px -3px 6px #3c4049;
   overflow: hidden;
-  margin: 0 auto;
+  margin: 1rem auto;
 }
 
 .style-button {
@@ -307,7 +336,7 @@ textarea {
   align-items: center;
   flex-wrap: wrap;
   gap: 0.75rem;
-  margin: 0.75rem 0 0;
+  margin: 0;
   position: relative;
 }
 
@@ -512,7 +541,7 @@ textarea {
   align-self: stretch;
   max-width: 100%;
   box-sizing: border-box;
-  padding-top: 1.125rem;
+  padding-top: 0.33rem;
 }
 
 .round-queue-heading {
@@ -890,13 +919,13 @@ textarea {
 }
 
 .playback-icon {
-  width: 35px;
-  height: 35px;
+  width: 14px;
+  height: 14px;
 }
 
 .neomorphus-button.playback-round-button .playback-icon {
-  width: 20px;
-  height: 20px;
+  width: 8px;
+  height: 8px;
 }
 
 .round-progress::-webkit-progress-bar {
