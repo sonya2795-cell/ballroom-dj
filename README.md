@@ -32,6 +32,25 @@ Google, Facebook, or Apple before starting a round.
 4. For local development, leave the defaults (`http://localhost:5173`) and run
    both client and server on the same machine.
 
+5. To forward in-app bug reports to your inbox, set the SMTP + recipient
+   values inside `server/.env`:
+
+   ```env
+   SMTP_HOST=smtp.example.com
+   SMTP_PORT=587
+   SMTP_USER=apikey
+   SMTP_PASS=secret
+   SMTP_SECURE=false
+   SMTP_FROM=Ballroom DJ <feedback@ballroom-dj.app>
+   FEEDBACK_RECIPIENTS=you@example.com,qa@example.com
+   # Optional overrides
+   # FEEDBACK_MAX_ATTACHMENTS=3
+   # FEEDBACK_MAX_FILE_BYTES=8000000
+   ```
+
+   These settings power the in-app **Feedback** modal so screenshots + notes
+   route straight to your support mailbox.
+
 ## Provider setup tips
 
 - In the Firebase console, enable each provider (Google, Facebook, Apple) and

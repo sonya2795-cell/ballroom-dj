@@ -62,8 +62,6 @@ const SPEED_MIN_PERCENT = 50;
 const SPEED_MAX_PERCENT = 120;
 const SPEED_STEP_PERCENT = 1;
 const DEFAULT_SPEED_PERCENT = 100;
-const ACTIVE_FONT_SIZE = "1.5rem";
-const UPCOMING_FONT_SIZE = "1.25rem";
 const BACKGROUND_COLOR = "#30333a";
 const TEXT_COLOR = "#f2f4f7";
 const HIGHLIGHT_COLOR = "#25ed75";
@@ -310,6 +308,12 @@ function Player() {
     selectedMode === "practice" &&
     (normalizedPracticeDanceId === PASO_DANCE_ID ||
       normalizedLoadingDanceId === PASO_DANCE_ID);
+  const practiceDanceRows = useMemo(() => {
+    if (!practiceDances.length) return [];
+    const firstRow = practiceDances.slice(0, 3);
+    const secondRow = practiceDances.slice(3);
+    return [firstRow, secondRow].filter((row) => row.length > 0);
+  }, [practiceDances]);
   const shouldShowCrashSelector = isPasoRoundContext;
   const isCrashSelectionActive = isPasoRoundContext || isPasoPracticeContext;
   const getActiveCrashSeconds = useCallback(
@@ -1582,21 +1586,30 @@ function Player() {
   }, [round, upcomingIndex]);
 
   const practiceDanceButtonsMarkup =
-    practiceDances.length > 0
+    practiceDanceRows.length > 0
       ? (
-          <div className="practice-dance-button-group">
-            {practiceDances.map((dance) => (
-              <button
-                key={dance.id}
-                type="button"
-                className={`neomorphus-button${
-                  practicePlaylist?.danceId === dance.id ? " active" : ""
+          <div className="practice-dance-button-group practice-dance-button-group--two-rows">
+            {practiceDanceRows.map((row, rowIndex) => (
+              <div
+                key={`practice-dance-row-${rowIndex}`}
+                className={`practice-dance-button-row practice-dance-button-row--${
+                  rowIndex === 0 ? "first" : "second"
                 }`}
-                disabled={practiceLoadingDance === dance.id || practiceDancesLoading}
-                onClick={() => handlePracticeRequest(dance.id)}
               >
-                {practiceLoadingDance === dance.id ? "Loading..." : dance.label}
-              </button>
+                {row.map((dance) => (
+                  <button
+                    key={dance.id}
+                    type="button"
+                    className={`neomorphus-button${
+                      practicePlaylist?.danceId === dance.id ? " active" : ""
+                    }`}
+                    disabled={practiceLoadingDance === dance.id || practiceDancesLoading}
+                    onClick={() => handlePracticeRequest(dance.id)}
+                  >
+                    {practiceLoadingDance === dance.id ? "Loading..." : dance.label}
+                  </button>
+                ))}
+              </div>
             ))}
           </div>
         )
@@ -1847,6 +1860,25 @@ function Player() {
       }
     }
   }
+
+  const heatSuffix = currentHeatLabel ? ` • ${currentHeatLabel}` : "";
+
+  const nextSongCountdownLabel = (() => {
+    if (breakTimeLeft === null) return null;
+
+    let label = `Next song starts in: ${breakTimeLeft} seconds`;
+    if (
+      upcomingIndex !== null &&
+      upcomingIndex !== undefined &&
+      round[upcomingIndex]?.dance
+    ) {
+      label += ` • Up Next (${upcomingIndex + 1}/${round.length})${heatSuffix}: ${
+        round[upcomingIndex].dance
+      }`;
+    }
+
+    return label;
+  })();
 
   // Debug logging to inspect why the play/pause toggle button renders as a square.
   useEffect(() => {
@@ -2331,11 +2363,6 @@ function Player() {
                         <li
                           key={queueKey}
                           style={{
-                            fontSize: isActive
-                              ? ACTIVE_FONT_SIZE
-                              : isUpcoming
-                              ? UPCOMING_FONT_SIZE
-                              : undefined,
                             color: isActive
                               ? HIGHLIGHT_COLOR
                               : isUpcoming
@@ -2525,7 +2552,7 @@ function Player() {
                     disabled={!selectedStyle || !ENABLED_STYLE_IDS.has(selectedStyle)}
                     className="neomorphus-button round-reload-button"
                   >
-                    🔄
+                    Reload Round
                   </button>
                   <button
                     type="button"
@@ -2589,8 +2616,8 @@ function Player() {
           {practiceControlsMarkup}
           {shouldShowRoundAudioControls ? (
             <div className="audio-control-container">
-              {breakTimeLeft !== null ? (
-                <p className="playback-countdown">Next song starts in: {breakTimeLeft} seconds</p>
+              {nextSongCountdownLabel ? (
+                <p className="playback-countdown">{nextSongCountdownLabel}</p>
               ) : null}
               <div className="playback-progress-row">
                 <span className="playback-time playback-time-elapsed">{roundTimeElapsedLabel}</span>

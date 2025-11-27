@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Routes, Route, useNavigate } from "react-router-dom";
 import AuthModal from "./components/AuthModal.jsx";
+import FeedbackModal from "./components/FeedbackModal.jsx";
 import { useAuth } from "./context/AuthContext.jsx";
 import AdminLibrary from "./pages/AdminLibrary.jsx";
 import { fetchWithOrigin } from "./utils/apiClient.js";
@@ -61,8 +62,7 @@ const SPEED_MIN_PERCENT = 50;
 const SPEED_MAX_PERCENT = 120;
 const SPEED_STEP_PERCENT = 1;
 const DEFAULT_SPEED_PERCENT = 100;
-const ACTIVE_FONT_SIZE = "1.5rem";
-const UPCOMING_FONT_SIZE = "1.25rem";
+const PREVIOUS_RESTART_THRESHOLD_SECONDS = 3;
 const BACKGROUND_COLOR = "#30333a";
 const TEXT_COLOR = "#f2f4f7";
 const HIGHLIGHT_COLOR = "#25ed75";
@@ -204,10 +204,12 @@ function PlayerApp() {
   } = useAuth();
   const navigate = useNavigate();
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [roundSource, setRoundSource] = useState([]);
   const [roundHeatMode, setRoundHeatMode] = useState(DEFAULT_HEAT_MODE);
   const [currentIndex, setCurrentIndex] = useState(null);
   const [breakTimeLeft, setBreakTimeLeft] = useState(null);
+  const [activeBreakTotalSeconds, setActiveBreakTotalSeconds] = useState(null);
   const [isBreakPaused, setIsBreakPaused] = useState(false);
   const [upcomingIndex, setUpcomingIndex] = useState(null);
   const [selectedStyle, setSelectedStyle] = useState(null);
@@ -386,6 +388,7 @@ function PlayerApp() {
     setBreakTimeLeft(null);
     setUpcomingIndex(null);
     setIsBreakPaused(false);
+    setActiveBreakTotalSeconds(null);
   }, [clearBreakInterval]);
 
   const startBreakCountdown = useCallback(
@@ -594,12 +597,17 @@ function PlayerApp() {
   const getPreviousIndex = () => {
     if (round.length === 0) return null;
 
-    const effectiveIndex =
-      currentIndex !== null
-        ? currentIndex
-        : upcomingIndex !== null
-        ? upcomingIndex
-        : null;
+    let effectiveIndex = null;
+
+    if (breakTimeLeft !== null && upcomingIndex !== null) {
+      // During the break, treat the upcoming song as the active slot so we can jump
+      // back to the song that just finished.
+      effectiveIndex = upcomingIndex;
+    } else if (currentIndex !== null) {
+      effectiveIndex = currentIndex;
+    } else if (upcomingIndex !== null) {
+      effectiveIndex = upcomingIndex;
+    }
 
     if (effectiveIndex === null || effectiveIndex <= 0) {
       return null;
@@ -630,6 +638,7 @@ function PlayerApp() {
     resetBreakState();
 
     breakCountdownRef.current = breakDurationSeconds;
+    setActiveBreakTotalSeconds(breakDurationSeconds);
     setBreakTimeLeft(breakCountdownRef.current);
     setUpcomingIndex(nextIndex);
     setIsBreakPaused(false);
@@ -1119,23 +1128,150 @@ function PlayerApp() {
   };
 
   const handlePrevious = () => {
-    const previousIndex = getPreviousIndex();
-    if (previousIndex === null) return;
+    const thresholdSeconds = PREVIOUS_RESTART_THRESHOLD_SECONDS;
+    const hasBreakActive = breakTimeLeft !== null;
+    const activeSong = currentIndex !== null ? round[currentIndex] : null;
 
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
+    const goToPreviousSong = () => {
+      const previousIndex = getPreviousIndex();
+      if (previousIndex === null) {
+        return false;
+      }
+
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      }
+
+      clearPlayTimeout();
+      resetBreakState();
+      clearFadeTimers({ resetVolume: true });
+
+      advancingRef.current = false;
+      setIsPlaying(false);
+      setCurrentIndex(previousIndex);
+      setCurrentTime(0);
+      setDuration(0);
+      return true;
+    };
+
+    const restartCurrentSong = () => {
+      if (!activeSong || currentIndex === null) {
+        return false;
+      }
+
+      if (audioRef.current) {
+        audioRef.current.currentTime = 0;
+      }
+
+      clearPlayTimeout();
+      clearFadeTimers({ resetVolume: true });
+      setCurrentTime(0);
+
+      if (isPlaying) {
+        schedulePlayTimeout(getRoundDurationLimitSeconds(activeSong));
+      }
+
+      return true;
+    };
+
+    const restartBreak = () => {
+      if (upcomingIndex === null) {
+        return false;
+      }
+
+      const totalSeconds =
+        activeBreakTotalSeconds != null ? activeBreakTotalSeconds : breakDurationSeconds;
+      if (
+        totalSeconds == null ||
+        Number.isNaN(totalSeconds) ||
+        totalSeconds <= 0
+      ) {
+        return false;
+      }
+
+      breakCountdownRef.current = totalSeconds;
+      setActiveBreakTotalSeconds(totalSeconds);
+      setBreakTimeLeft(totalSeconds);
+      setIsBreakPaused(false);
+      startBreakCountdown(upcomingIndex);
+      advancingRef.current = true;
+      return true;
+    };
+
+    const returnToBreakBeforeCurrentSong = () => {
+      if (currentIndex === null) {
+        return false;
+      }
+      const targetUpcomingIndex = currentIndex;
+      if (targetUpcomingIndex === null) {
+        return false;
+      }
+
+      const precedingIndex =
+        targetUpcomingIndex > 0 ? targetUpcomingIndex - 1 : null;
+
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      }
+
+      clearPlayTimeout();
+      clearFadeTimers({ resetVolume: true });
+      resetBreakState();
+
+      setIsPlaying(false);
+      setCurrentTime(0);
+      setDuration(0);
+      setCurrentIndex(precedingIndex);
+
+      const totalSeconds = breakDurationSeconds;
+      if (
+        totalSeconds == null ||
+        Number.isNaN(totalSeconds) ||
+        totalSeconds <= 0
+      ) {
+        return false;
+      }
+
+      breakCountdownRef.current = totalSeconds;
+      setActiveBreakTotalSeconds(totalSeconds);
+      setBreakTimeLeft(totalSeconds);
+      setUpcomingIndex(targetUpcomingIndex);
+      setIsBreakPaused(false);
+      advancingRef.current = true;
+      startBreakCountdown(targetUpcomingIndex);
+      return true;
+    };
+
+    if (hasBreakActive) {
+      const breakTotal = activeBreakTotalSeconds ?? breakDurationSeconds;
+      const elapsed =
+        breakTotal != null && breakTimeLeft != null
+          ? Math.max(breakTotal - breakTimeLeft, 0)
+          : null;
+
+      if (elapsed != null && elapsed >= thresholdSeconds) {
+        restartBreak();
+        return;
+      }
+
+      goToPreviousSong();
+      return;
     }
 
-    clearPlayTimeout();
-    resetBreakState();
-    clearFadeTimers({ resetVolume: true });
+    if (activeSong && currentTime >= thresholdSeconds) {
+      restartCurrentSong();
+      return;
+    }
 
-    advancingRef.current = false;
-    setIsPlaying(false);
-    setCurrentIndex(previousIndex);
-    setCurrentTime(0);
-    setDuration(0);
+    if (activeSong && currentTime < thresholdSeconds) {
+      if (returnToBreakBeforeCurrentSong()) {
+        return;
+      }
+    }
+
+    goToPreviousSong();
   };
 
   const handleTogglePlayback = () => {
@@ -1540,15 +1676,40 @@ function PlayerApp() {
   };
 
   const handlePracticePrevious = () => {
-    setPracticeTrackIndex((prev) => (prev > 0 ? prev - 1 : prev));
-    setPracticeCurrentTime(0);
-    setPracticeDuration(0);
-    setPracticeIsPlaying(false);
+    if (practicePlaylistLength === 0) {
+      return;
+    }
+
     const audio = practiceAudioRef.current;
+    const hasPreviousTrack = practiceTrackIndex > 0;
+    const shouldGoToPrevious =
+      practiceCurrentTime < PREVIOUS_RESTART_THRESHOLD_SECONDS && hasPreviousTrack;
+
+    if (shouldGoToPrevious) {
+      setPracticeTrackIndex((prev) => (prev > 0 ? prev - 1 : prev));
+      setPracticeCurrentTime(0);
+      setPracticeDuration(0);
+      setPracticeIsPlaying(false);
+      if (audio) {
+        audio.pause();
+        audio.currentTime = 0;
+      }
+      return;
+    }
+
+    const clipStartSeconds = getClipStartSeconds(currentPracticeTrack);
     if (audio) {
       audio.pause();
-      audio.currentTime = 0;
+      try {
+        audio.currentTime = clipStartSeconds;
+      } catch (err) {
+        console.warn("Failed to restart practice track", err);
+      }
+      if (practiceIsPlaying) {
+        audio.play().catch((err) => console.error("Practice play error:", err));
+      }
     }
+    setPracticeCurrentTime(0);
   };
 
   useEffect(() => {
@@ -1615,7 +1776,7 @@ function PlayerApp() {
     ),
   );
   const practicePlaylistLength = practicePlaylist?.tracks?.length ?? 0;
-  const practiceCanGoPrevious = practiceTrackIndex > 0;
+  const practiceCanGoPrevious = practicePlaylistLength > 0;
   const practiceCanGoNext =
     practicePlaylistLength > 0 && practiceTrackIndex < practicePlaylistLength - 1;
   const practiceNowPlayingLabel = (() => {
@@ -1629,12 +1790,16 @@ function PlayerApp() {
     }
     return "Practice not loaded yet";
   })();
+  const practiceStartButtonIcon = practiceIsPlaying ? (
+    <PauseIcon className="round-control-icon--primary" />
+  ) : (
+    <PlayIcon className="round-control-icon--primary" />
+  );
   const practiceDanceRows = useMemo(() => {
     if (!practiceDances.length) return [];
-    const midpoint = Math.ceil(practiceDances.length / 2);
-    return [practiceDances.slice(0, midpoint), practiceDances.slice(midpoint)].filter(
-      (row) => row.length > 0,
-    );
+    const firstRow = practiceDances.slice(0, 3);
+    const secondRow = practiceDances.slice(3);
+    return [firstRow, secondRow].filter((row) => row.length > 0);
   }, [practiceDances]);
 
   const practiceDanceButtonsMarkup =
@@ -1642,7 +1807,12 @@ function PlayerApp() {
       ? (
           <div className="practice-dance-button-group practice-dance-button-group--two-rows">
             {practiceDanceRows.map((row, rowIndex) => (
-              <div key={`practice-dance-row-${rowIndex}`} className="practice-dance-button-row">
+              <div
+                key={`practice-dance-row-${rowIndex}`}
+                className={`practice-dance-button-row practice-dance-button-row--${
+                  rowIndex === 0 ? "first" : "second"
+                }`}
+              >
                 {row.map((dance) => (
                   <button
                     key={dance.id}
@@ -1692,7 +1862,12 @@ function PlayerApp() {
                     {badge.label}
                   </div>
                   <div className="round-queue-item-text">
-                    <div className="round-queue-item-title">{getTrackTitle(track)}</div>
+                    <div
+                      className="round-queue-item-title"
+                      style={{ color: isActive ? HIGHLIGHT_COLOR : undefined }}
+                    >
+                      {getTrackTitle(track)}
+                    </div>
                     <div className="round-queue-item-artist">{getTrackArtist(track)}</div>
                   </div>
                 </li>
@@ -1731,7 +1906,9 @@ function PlayerApp() {
 
   const previousIndexCandidate = getPreviousIndex();
   const nextIndexCandidate = getNextIndex();
-  const canGoPrevious = previousIndexCandidate !== null;
+  const canGoPrevious = Boolean(
+    breakTimeLeft !== null || currentIndex !== null || previousIndexCandidate !== null,
+  );
   const canGoNext = nextIndexCandidate !== null;
   const isBreakActive = breakTimeLeft !== null;
   const isBreakCountingDown = isBreakActive && !isBreakPaused;
@@ -1776,6 +1953,26 @@ function PlayerApp() {
       effectiveDuration > 0 ? (effectiveCurrentTime / effectiveDuration) * 100 : 0,
     ),
   );
+  const breakTotalSeconds =
+    activeBreakTotalSeconds ?? (isBreakActive ? breakDurationSeconds : null);
+  const breakRemainingSeconds =
+    isBreakActive && breakTimeLeft != null ? Math.max(breakTimeLeft, 0) : 0;
+  const breakProgressMax =
+    breakTotalSeconds && breakTotalSeconds > 0 ? breakTotalSeconds : 1;
+  const breakProgressPercent =
+    isBreakActive && breakTotalSeconds
+      ? Math.min(100, Math.max(0, (breakRemainingSeconds / breakProgressMax) * 100))
+      : 0;
+  const showBreakProgress = isBreakActive && breakTotalSeconds != null;
+  const progressBarValue = showBreakProgress ? breakRemainingSeconds : effectiveCurrentTime;
+  const progressBarMax = showBreakProgress ? breakProgressMax : effectiveDuration || 1;
+  const progressBarPercent = showBreakProgress ? breakProgressPercent : progressPercent;
+  const elapsedTimeLabel = showBreakProgress
+    ? formatTime(breakRemainingSeconds)
+    : formatTime(effectiveCurrentTime);
+  const totalTimeLabel = showBreakProgress
+    ? formatTime(breakTotalSeconds ?? 0)
+    : formatTime(effectiveDuration);
   const isPasoRoundTrack = isLatinRoundMode && isPasoSong(currentSong);
   const roundPasoReferenceTrack = useMemo(
     () => (isLatinRoundMode ? round.find((song) => isPasoSong(song)) ?? null : null),
@@ -1981,27 +2178,22 @@ function PlayerApp() {
       </div>
     ) : null;
 
-  const nowPlayingLabel = (() => {
-    if (currentIndex !== null && round[currentIndex]?.dance) {
-      return `Now Playing (${currentIndex + 1}/${round.length})${heatSuffix}: ${round[currentIndex].dance}`;
+  const nextSongCountdownLabel = (() => {
+    if (breakTimeLeft === null) return null;
+
+    let label = `Next song starts in: ${breakTimeLeft} seconds`;
+    if (upcomingIndex !== null && round[upcomingIndex]?.dance) {
+      label += ` • Up Next (${upcomingIndex + 1}/${round.length})${heatSuffix}: ${round[upcomingIndex].dance}`;
     }
 
-    if (breakTimeLeft !== null && upcomingIndex !== null && round[upcomingIndex]?.dance) {
-      return `Up Next (${upcomingIndex + 1}/${round.length})${heatSuffix}: ${round[upcomingIndex].dance}`;
-    }
-
-    if (round.length > 0) {
-      return `Round Ready (${round.length} song${round.length === 1 ? "" : "s"})${heatSuffix}`;
-    }
-
-    return "Round not loaded yet";
+    return label;
   })();
 
-  const roundTransportControls =
-        selectedMode === "round"
-      ? (
-          <div
-              style={{
+const roundTransportControls =
+      selectedMode === "round"
+    ? (
+        <div
+            style={{
                 width: "100%",
                 display: "flex",
                 flexDirection: "column",
@@ -2023,38 +2215,40 @@ function PlayerApp() {
             >
               <div
                 style={{
-                  textAlign: "center",
-                  fontWeight: 600,
-                  width: "100%",
-                  color:
-                    currentIndex !== null && breakTimeLeft === null
-                      ? HIGHLIGHT_COLOR
-                      : TEXT_COLOR,
-                  opacity: round.length === 0 ? 0.75 : 1,
-                }}
-              >
-                {nowPlayingLabel}
-              </div>
-              <div
-                style={{
                   width: "100%",
                   display: "flex",
                   flexDirection: "column",
                   gap: "0.5rem",
                 }}
               >
+                {nextSongCountdownLabel ? (
+                  <h3
+                    style={{
+                      textAlign: "left",
+                      margin: 0,
+                      width: "91%",
+                      maxWidth: "91%",
+                      alignSelf: "center",
+                      fontSize: "0.9rem",
+                      color: "rgba(255, 255, 255, 0.65)",
+                      fontWeight: 400,
+                    }}
+                  >
+                    {nextSongCountdownLabel}
+                  </h3>
+                ) : null}
                 <div
                   className="round-progress-wrapper"
                   style={{ width: "91%", maxWidth: "91%", alignSelf: "center" }}
                 >
                   <progress
-                    value={effectiveCurrentTime}
-                    max={effectiveDuration || 1}
+                    value={progressBarValue}
+                    max={progressBarMax}
                     className="round-progress"
                   />
                   <div
                     className="round-progress-thumb"
-                    style={{ left: `${progressPercent}%` }}
+                    style={{ left: `${progressBarPercent}%` }}
                   />
                 </div>
                 <div
@@ -2068,8 +2262,8 @@ function PlayerApp() {
                     alignSelf: "center",
                   }}
                 >
-                  <span>{formatTime(effectiveCurrentTime)}</span>
-                  <span>{formatTime(effectiveDuration)}</span>
+                  <span>{elapsedTimeLabel}</span>
+                  <span>{totalTimeLabel}</span>
                 </div>
               </div>
             </div>
@@ -2212,13 +2406,15 @@ function PlayerApp() {
             </button>
               <button
                 type="button"
-                className="neomorphus-button round-control"
+                className="neomorphus-button round-control round-control--primary"
                 onClick={handlePracticeToggle}
                 disabled={!currentPracticeTrack?.file}
-                aria-label={practiceIsPlaying ? "Pause practice playback" : "Play practice playback"}
+                aria-label={
+                  practiceIsPlaying ? "Pause practice playback" : "Play practice playback"
+                }
                 title={practiceIsPlaying ? "Pause Practice" : "Play Practice"}
               >
-                {practiceIsPlaying ? "⏸️" : "▶️"}
+                {practiceStartButtonIcon}
               </button>
             <button
               type="button"
@@ -2314,59 +2510,82 @@ function PlayerApp() {
         error={authError}
         onRetry={() => clearAuthError()}
       />
+      <FeedbackModal
+        isOpen={showFeedbackModal}
+        onClose={() => setShowFeedbackModal(false)}
+        user={user}
+      />
       <header className="app-header">
-        <h1 className="app-title app-title-floating">
-          Muzon App<span className="app-subtitle"> - Ballroom DJ</span>
-        </h1>
-        {isAuthenticated ? (
-          <div className="app-menu-bar" ref={authMenuContainerRef}>
+        <div className="app-header-section app-header-section--left">
+          <h1 className="app-title app-title-floating">
+            Muzon App<span className="app-subtitle"> - Ballroom DJ</span>
+          </h1>
+        </div>
+        <div className="app-header-meta">
+          <div className="app-header-badge" aria-label="Beta release badge">
+            Beta
+          </div>
+          {isAuthenticated ? (
             <button
               type="button"
-              className={`neomorphus-button app-menu-button${isAuthMenuOpen ? " app-menu-button--open" : ""}`}
-              onClick={handleToggleAuthMenu}
-              aria-haspopup="true"
-              aria-expanded={isAuthMenuOpen}
-              aria-label="Account menu"
+              className="neomorphus-button feedback-button"
+              onClick={() => setShowFeedbackModal(true)}
             >
-              Menu
+              Feedback
             </button>
-            {isAuthMenuOpen ? (
-              <div className="app-menu-dropdown">
-                <div className="app-menu-header">
-                  <span className="app-menu-text">
-                    Signed in{user?.email ? ` as ${user.email}` : ""}
-                  </span>
-                </div>
-                {isAdmin ? (
+          ) : null}
+        </div>
+        <div className="app-header-section app-header-section--right">
+          {isAuthenticated ? (
+            <div className="app-menu-bar" ref={authMenuContainerRef}>
+              <button
+                type="button"
+                className={`neomorphus-button app-menu-button${isAuthMenuOpen ? " app-menu-button--open" : ""}`}
+                onClick={handleToggleAuthMenu}
+                aria-haspopup="true"
+                aria-expanded={isAuthMenuOpen}
+                aria-label="Account menu"
+              >
+                Menu
+              </button>
+              {isAuthMenuOpen ? (
+                <div className="app-menu-dropdown">
+                  <div className="app-menu-header">
+                    <span className="app-menu-text">
+                      Signed in{user?.email ? ` as ${user.email}` : ""}
+                    </span>
+                  </div>
+                  {isAdmin ? (
+                    <button
+                      type="button"
+                      className="app-menu-item"
+                      onClick={handleOpenAdminLibrary}
+                    >
+                      Admin Library
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     className="app-menu-item"
-                    onClick={handleOpenAdminLibrary}
+                    onClick={handleSignOut}
                   >
-                    Admin Library
+                    Sign Out
                   </button>
-                ) : null}
-                <button
-                  type="button"
-                  className="app-menu-item"
-                  onClick={handleSignOut}
-                >
-                  Sign Out
-                </button>
-              </div>
-            ) : null}
-          </div>
-        ) : (
-          <div className="app-menu-bar">
-            <button
-              type="button"
-              className="neomorphus-button app-menu-button"
-              onClick={handleShowSignIn}
-            >
-              Sign In
-            </button>
-          </div>
-        )}
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <div className="app-menu-bar">
+              <button
+                type="button"
+                className="neomorphus-button app-menu-button"
+                onClick={handleShowSignIn}
+              >
+                Sign In
+              </button>
+            </div>
+          )}
+        </div>
       </header>
 
       <div className="app-root">
@@ -2458,12 +2677,6 @@ function PlayerApp() {
                   )
                 )}
 
-                {selectedMode === "round" && breakTimeLeft !== null && (
-                  <div style={{ marginTop: "1rem" }}>
-                    <h3>Next song starts in: {breakTimeLeft} seconds</h3>
-                  </div>
-                )}
-
                 {selectedMode === "practice" &&
                   selectedStyle &&
                   ENABLED_STYLE_IDS.has(selectedStyle) && (
@@ -2527,7 +2740,7 @@ function PlayerApp() {
                         }
                         className="neomorphus-button round-reload-button"
                       >
-                        🔄 Reload Round
+                        Reload Round
                       </button>
                     </div>
                   ) : (
@@ -2567,12 +2780,6 @@ function PlayerApp() {
                                   <div
                                     className="round-queue-item-title"
                                     style={{
-                                      fontSize:
-                                        currentIndex === i && breakTimeLeft === null
-                                          ? ACTIVE_FONT_SIZE
-                                          : breakTimeLeft !== null && upcomingIndex === i
-                                          ? UPCOMING_FONT_SIZE
-                                          : undefined,
                                       color:
                                         currentIndex === i && breakTimeLeft === null
                                           ? HIGHLIGHT_COLOR
@@ -2599,7 +2806,7 @@ function PlayerApp() {
                         disabled={!selectedStyle || !ENABLED_STYLE_IDS.has(selectedStyle)}
                         className="neomorphus-button round-reload-button"
                       >
-                        🔄 Reload Round
+                        Reload Round
                       </button>
                     </div>
                   )
@@ -2613,7 +2820,7 @@ function PlayerApp() {
                   ref={audioRef}
                   src={round[currentIndex].file}   // 👈 USES full Firebase URL directly
                   preload="auto"
-                  autoPlay
+                  autoPlay={!isBreakActive}
                   onPlay={handlePlay}
                   onPause={handlePause}
                   onEnded={handleEnded}

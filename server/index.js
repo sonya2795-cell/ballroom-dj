@@ -3,12 +3,14 @@ const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const admin = require("firebase-admin");
+const multer = require("multer");
 
 const {
   parseTimeValueToMilliseconds,
   extractCrashMetadata,
   buildCrashUpdateFromPayload,
 } = require("./crashUtils");
+const { sendFeedbackEmail } = require("./email/sendFeedbackEmail");
 
 const app = express();
 const PORT = 3000;
@@ -20,6 +22,68 @@ const allowedOrigins = rawClientOrigins
 const isProduction = process.env.NODE_ENV === "production";
 const SESSION_COOKIE_NAME = "ballroom_session";
 const SESSION_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 5; // 5 days
+const DEFAULT_FEEDBACK_MAX_FILES = 3;
+const DEFAULT_FEEDBACK_MAX_FILE_SIZE_BYTES = 8 * 1024 * 1024; // 8MB
+const FEEDBACK_DESCRIPTION_MAX_LENGTH = 2000;
+const FEEDBACK_ALLOWED_MIME_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/jpg",
+  "image/webp",
+  "image/avif",
+  "image/heic",
+  "image/heif",
+]);
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const resolvedFeedbackMaxFiles = Number(process.env.FEEDBACK_MAX_ATTACHMENTS);
+const FEEDBACK_MAX_ATTACHMENTS =
+  Number.isFinite(resolvedFeedbackMaxFiles) && resolvedFeedbackMaxFiles > 0
+    ? resolvedFeedbackMaxFiles
+    : DEFAULT_FEEDBACK_MAX_FILES;
+
+const resolvedFeedbackMaxBytes = Number(process.env.FEEDBACK_MAX_FILE_BYTES);
+const FEEDBACK_MAX_FILE_BYTES =
+  Number.isFinite(resolvedFeedbackMaxBytes) && resolvedFeedbackMaxBytes > 0
+    ? resolvedFeedbackMaxBytes
+    : DEFAULT_FEEDBACK_MAX_FILE_SIZE_BYTES;
+
+const FEEDBACK_MAX_FILE_SIZE_LABEL =
+  FEEDBACK_MAX_FILE_BYTES >= 1024 * 1024
+    ? `${Math.round(FEEDBACK_MAX_FILE_BYTES / (1024 * 1024))}MB`
+    : `${Math.round(FEEDBACK_MAX_FILE_BYTES / 1024)}KB`;
+
+const feedbackUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: FEEDBACK_MAX_FILE_BYTES,
+    files: FEEDBACK_MAX_ATTACHMENTS,
+  },
+});
+
+function feedbackUploadMiddleware(req, res, next) {
+  feedbackUpload.array("screenshots", FEEDBACK_MAX_ATTACHMENTS)(req, res, (err) => {
+    if (err) {
+      if (err.code === "LIMIT_FILE_SIZE") {
+        res
+          .status(400)
+          .json({ error: `Each screenshot must be smaller than ${FEEDBACK_MAX_FILE_SIZE_LABEL}.` });
+        return;
+      }
+      if (err.code === "LIMIT_FILE_COUNT") {
+        res
+          .status(400)
+          .json({ error: `You can upload up to ${FEEDBACK_MAX_ATTACHMENTS} screenshots.` });
+        return;
+      }
+      res
+        .status(400)
+        .json({ error: "We couldn’t process those files. Try uploading fewer screenshots." });
+      return;
+    }
+    next();
+  });
+}
 
 // Enable CORS (allow frontend to connect)
 app.use(
@@ -321,6 +385,29 @@ function formatUserRecord(userRecord) {
     customClaims: userRecord.customClaims || {},
     providers: userRecord.providerData.map((provider) => provider.providerId),
   };
+}
+
+function sanitizeText(value) {
+  if (typeof value !== "string") {
+    return "";
+  }
+  return value.trim();
+}
+
+async function getOptionalSessionUser(req) {
+  const sessionCookie = req.cookies?.[SESSION_COOKIE_NAME];
+
+  if (!sessionCookie) {
+    return null;
+  }
+
+  try {
+    const decoded = await admin.auth().verifySessionCookie(sessionCookie);
+    const userRecord = await admin.auth().getUser(decoded.uid);
+    return formatUserRecord(userRecord);
+  } catch (err) {
+    return null;
+  }
 }
 
 async function requireAuth(req, res, next) {
@@ -669,6 +756,93 @@ app.get("/api/practice", async (req, res) => {
     res.status(500).json({ error: "Failed to generate practice track" });
   }
 });
+
+app.post(
+  "/api/feedback/email",
+  feedbackUploadMiddleware,
+  async (req, res) => {
+    try {
+      const description = sanitizeText(req.body?.description);
+
+      if (!description) {
+        res
+          .status(400)
+          .json({ error: "Please describe the issue before sending feedback." });
+        return;
+      }
+
+      if (description.length > FEEDBACK_DESCRIPTION_MAX_LENGTH) {
+        res.status(400).json({
+          error: `Feedback is too long. Keep it under ${FEEDBACK_DESCRIPTION_MAX_LENGTH} characters.`,
+        });
+        return;
+      }
+
+      const refererHeader =
+        typeof req.get === "function" ? req.get("referer") : req.headers?.referer;
+      const userAgentHeader =
+        typeof req.get === "function" ? req.get("user-agent") : req.headers?.["user-agent"];
+
+      const metadata = {
+        pageUrl: sanitizeText(req.body?.pageUrl || refererHeader),
+        userAgent: sanitizeText(req.body?.userAgent || userAgentHeader),
+        platform: sanitizeText(req.body?.platform),
+        timezone: sanitizeText(req.body?.timezone),
+        appVersion: sanitizeText(req.body?.appVersion),
+        ipAddress: req.ip,
+      };
+
+      let contactEmail = sanitizeText(req.body?.contactEmail);
+      if (contactEmail.length > 254) {
+        contactEmail = contactEmail.slice(0, 254);
+      }
+
+      if (contactEmail && !EMAIL_REGEX.test(contactEmail)) {
+        res.status(400).json({ error: "Enter a valid email or leave the field blank." });
+        return;
+      }
+
+      const files = Array.isArray(req.files) ? req.files : [];
+      const attachments = [];
+
+      for (const file of files) {
+        if (!file?.buffer) {
+          continue;
+        }
+
+        if (!FEEDBACK_ALLOWED_MIME_TYPES.has(file.mimetype)) {
+          res
+            .status(400)
+            .json({ error: `Unsupported file type: ${file.mimetype || "unknown"}` });
+          return;
+        }
+
+        attachments.push({
+          filename: file.originalname || `${file.fieldname}-${attachments.length + 1}.png`,
+          contentType: file.mimetype,
+          content: file.buffer,
+        });
+      }
+
+      const userRecord = await getOptionalSessionUser(req);
+
+      await sendFeedbackEmail({
+        description,
+        user: userRecord,
+        contactEmail,
+        metadata,
+        attachments,
+      });
+
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("Failed to send feedback email", err);
+      res.status(500).json({
+        error: "We couldn’t send that feedback right now. Please try again in a minute.",
+      });
+    }
+  },
+);
 
 app.post("/api/admin/storage-upload", requireAuth, requireAdmin, async (req, res) => {
   try {

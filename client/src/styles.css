@@ -184,11 +184,13 @@ textarea {
   font-weight: 400;
   font-size: calc(var(--text-xl) * 0.35);
   margin: 0 0 1.5rem;
+  color: #25ed75;
 }
 
 .app-title .app-subtitle {
   font-size: 0.65em;
   font-weight: 300;
+  color: #ffffff;
 }
 
 .app-title-floating {
@@ -214,6 +216,42 @@ textarea {
   margin: 0;
 }
 
+.app-header-section {
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+
+.app-header-section--left {
+  justify-content: flex-start;
+}
+
+.app-header-section--right {
+  justify-content: flex-end;
+}
+
+.app-header-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.app-header-badge {
+  flex-shrink: 0;
+  padding: 0.2rem 0.6rem;
+  border-radius: 9999px;
+  background-color: #25ed75;
+  color: #0f141b;
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  box-shadow:
+    inset 1px 1px 2px rgba(255, 255, 255, 0.35),
+    inset -1px -1px 2px rgba(0, 0, 0, 0.25),
+    0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
 .neomorphus-button {
   background-color: #30333a;
   color: #ffffff;
@@ -227,6 +265,17 @@ textarea {
   box-shadow: 3px 3px 5px #131417, -3px -3px 5px #4d525d;
   cursor: pointer;
   transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.neomorphus-button.small {
+  padding: 0.25rem 0.85rem;
+  font-size: 0.85rem;
+}
+
+.neomorphus-button.feedback-button {
+  padding: 0.35rem 0.95rem;
+  font-size: 0.85rem;
+  letter-spacing: 0.02em;
 }
 
 .neomorphus-button.round-control {
@@ -300,7 +349,7 @@ textarea {
     inset 3px 3px 6px #21232a,
     inset -3px -3px 6px #3c4049;
   overflow: hidden;
-  margin: 1rem auto;
+  margin: 0.5rem auto;
 }
 
 .style-button {
@@ -444,9 +493,16 @@ textarea {
 
 .practice-dance-button-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 0.75rem;
   width: 100%;
+}
+
+.practice-dance-button-row--first {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.practice-dance-button-row--second {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .practice-dance-button-group .neomorphus-button {
@@ -1095,7 +1151,8 @@ textarea {
   margin-top: 0;
 }
 
-.auth-modal-backdrop {
+.auth-modal-backdrop,
+.feedback-modal-backdrop {
   position: fixed;
   inset: 0;
   display: flex;
@@ -1105,15 +1162,30 @@ textarea {
   z-index: 1000;
 }
 
-.auth-modal {
+.auth-modal,
+.feedback-modal {
   background-color: #2b2e35;
   color: #f2f4f7;
-  width: min(90vw, 360px);
-  padding: 2rem 2.25rem;
   border-radius: 1.25rem;
   box-shadow: -12px -12px 24px rgba(77, 82, 93, 0.2),
     12px 12px 24px rgba(19, 20, 23, 0.55);
+}
+
+.auth-modal {
+  width: min(90vw, 360px);
+  padding: 2rem 2.25rem;
   text-align: center;
+}
+
+.feedback-modal {
+  width: min(95vw, 640px);
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 2rem 2.25rem;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
 }
 
 .auth-modal h2 {
@@ -1158,6 +1230,192 @@ textarea {
 .auth-modal-error p {
   margin-top: 0.75rem;
   color: #ffb3b3;
+}
+
+.feedback-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.feedback-modal-callout {
+  margin: 0 0 0.2rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #8d94a3;
+  font-size: 0.75rem;
+}
+
+.feedback-modal-header h2 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.feedback-modal-close {
+  background: none;
+  border: none;
+  color: #f2f4f7;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.feedback-modal-subtitle {
+  margin: 0;
+  color: #b5bac6;
+}
+
+.feedback-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.feedback-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.feedback-field-label {
+  font-weight: 600;
+}
+
+.feedback-field-optional {
+  font-weight: 400;
+  color: #8d94a3;
+  font-size: 0.85em;
+}
+
+.feedback-form textarea,
+.feedback-form input {
+  width: 100%;
+  background-color: #30333a;
+  border: 1px solid #3d414b;
+  border-radius: 0.9rem;
+  color: #f2f4f7;
+  padding: 0.75rem 1rem;
+  font-size: 0.95rem;
+  box-sizing: border-box;
+}
+
+.feedback-form textarea {
+  resize: vertical;
+  min-height: 140px;
+}
+
+.feedback-form textarea::placeholder,
+.feedback-form input::placeholder {
+  color: #8d94a3;
+}
+
+.feedback-field-support {
+  align-self: flex-end;
+  font-size: 0.8rem;
+  color: #8d94a3;
+}
+
+.feedback-dropzone {
+  border: 1px dashed #4d525d;
+  border-radius: 0.9rem;
+  padding: 1rem;
+  background-color: rgba(48, 51, 58, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  cursor: pointer;
+}
+
+.feedback-dropzone.is-dragging {
+  border-color: #25ed75;
+  background-color: rgba(37, 237, 117, 0.12);
+}
+
+.feedback-dropzone-title {
+  margin: 0;
+  font-weight: 600;
+}
+
+.feedback-dropzone-subtitle,
+.feedback-dropzone-hint {
+  margin: 0.15rem 0 0;
+  color: #b5bac6;
+  font-size: 0.85rem;
+}
+
+.feedback-file-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.feedback-file-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.65rem 0.8rem;
+  border-radius: 0.85rem;
+  background-color: #2c3038;
+}
+
+.feedback-file-item div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.feedback-file-name {
+  margin: 0;
+  font-weight: 600;
+}
+
+.feedback-file-size {
+  color: #8d94a3;
+  font-size: 0.85rem;
+}
+
+.feedback-file-remove {
+  background: none;
+  border: none;
+  color: #ffb3b3;
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+}
+
+.feedback-context {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #8d94a3;
+}
+
+.feedback-alert {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  border-radius: 0.85rem;
+  font-size: 0.9rem;
+}
+
+.feedback-alert.error {
+  background-color: rgba(255, 77, 77, 0.12);
+  color: #ffb3b3;
+}
+
+.feedback-alert.success {
+  background-color: rgba(37, 237, 117, 0.12);
+  color: #9ff0b7;
+}
+
+.feedback-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
 }
 
 .auth-status {
