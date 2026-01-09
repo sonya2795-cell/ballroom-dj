@@ -2179,14 +2179,27 @@ function PlayerApp() {
     ) : null;
 
   const nextSongCountdownLabel = (() => {
-    if (breakTimeLeft === null) return null;
+    const upcomingDance = upcomingSong?.dance ?? null;
 
-    let label = `Next song starts in: ${breakTimeLeft} seconds`;
-    if (upcomingIndex !== null && round[upcomingIndex]?.dance) {
-      label += ` • Up Next (${upcomingIndex + 1}/${round.length})${heatSuffix}: ${round[upcomingIndex].dance}`;
+    if (breakTimeLeft !== null) {
+      return `${upcomingDance ?? "Next song"} starts in: ${breakTimeLeft} seconds`;
     }
 
-    return label;
+    if (
+      selectedMode === "round" &&
+      round.length > 0 &&
+      currentSong === null &&
+      breakTimeLeft === null
+    ) {
+      return "Press play to begin round";
+    }
+
+    if (currentSong) {
+      const currentDance = currentSong.dance ?? "Song";
+      return `${currentDance} playing`;
+    }
+
+    return null;
   })();
 
 const roundTransportControls =

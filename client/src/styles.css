@@ -34,7 +34,7 @@ textarea {
 .app-shell {
   width: calc(0.99 * (100% - 100px));
   max-width: calc(0.99 * (80rem - 100px));
-  height: 640.5px;
+  height: 650px;
   box-sizing: border-box;
   background-color: rgba(48, 51, 58, 0.7);
   backdrop-filter: blur(24px);

@@ -1866,14 +1866,15 @@ function Player() {
   const nextSongCountdownLabel = (() => {
     if (breakTimeLeft === null) return null;
 
-    let label = `Next song starts in: ${breakTimeLeft} seconds`;
+    const upcomingDance = upcomingSong?.dance ?? null;
+    let label = `${upcomingDance ?? "Next song"} starts in: ${breakTimeLeft} seconds`;
     if (
       upcomingIndex !== null &&
       upcomingIndex !== undefined &&
-      round[upcomingIndex]?.dance
+      upcomingDance
     ) {
       label += ` • Up Next (${upcomingIndex + 1}/${round.length})${heatSuffix}: ${
-        round[upcomingIndex].dance
+        upcomingDance
       }`;
     }
 
