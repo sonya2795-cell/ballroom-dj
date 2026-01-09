@@ -258,7 +258,6 @@ export default function FeedbackModal({ isOpen, onClose, user }) {
             className="feedback-modal-close"
             onClick={onClose}
             aria-label="Close feedback form"
-            aria-label="Upload screenshots"
           >
             ×
           </button>

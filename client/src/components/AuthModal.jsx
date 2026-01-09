@@ -1,7 +1,7 @@
 const PROVIDER_LABELS = {
   google: "Continue with Google",
-  facebook: "Continue with Facebook",
-  apple: "Continue with Apple",
+  facebook: "Continue with Facebook (coming soon)",
+  apple: "Continue with Apple (coming soon)",
 };
 const DISABLED_PROVIDERS = new Set(["facebook", "apple"]);
 

@@ -423,9 +423,40 @@ function AdminLibraryContent() {
         );
       }
 
-      const combined = combineSongData(firestoreSongs, storageFiles);
+      let cleanedSongs = firestoreSongs;
+      if (storageResult.status === "fulfilled") {
+        const storagePaths = new Set(
+          storageFiles
+            .map((file) => (typeof file?.path === "string" ? file.path.trim() : ""))
+            .filter(Boolean)
+        );
+        const missingSongs = firestoreSongs.filter((song) => {
+          const storagePath = typeof song?.storagePath === "string" ? song.storagePath.trim() : "";
+          return storagePath && !storagePaths.has(storagePath);
+        });
+
+        if (missingSongs.length) {
+          console.warn("[admin-library] auto-cleanup missing storage files", {
+            missing: missingSongs.length,
+          });
+          await Promise.allSettled(
+            missingSongs.map((song) => (song?.id ? removeSong(song.id) : Promise.resolve()))
+          );
+          const missingPaths = new Set(
+            missingSongs
+              .map((song) => (typeof song?.storagePath === "string" ? song.storagePath.trim() : ""))
+              .filter(Boolean)
+          );
+          cleanedSongs = firestoreSongs.filter((song) => {
+            const storagePath = typeof song?.storagePath === "string" ? song.storagePath.trim() : "";
+            return !missingPaths.has(storagePath);
+          });
+        }
+      }
+
+      const combined = combineSongData(cleanedSongs, storageFiles);
       console.debug("[admin-library] loadRows combined", {
-        firestoreSongs: firestoreSongs.length,
+        firestoreSongs: cleanedSongs.length,
         storageFiles: storageFiles.length,
         combined: combined.length,
       });

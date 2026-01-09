@@ -2178,29 +2178,22 @@ function PlayerApp() {
       </div>
     ) : null;
 
-  const nextSongCountdownLabel = (() => {
-    const upcomingDance = upcomingSong?.dance ?? null;
+  let nextSongCountdownLabel = null;
+  const upcomingDance = upcomingSong?.dance ?? null;
 
-    if (breakTimeLeft !== null) {
-      return `${upcomingDance ?? "Next song"} starts in: ${breakTimeLeft} seconds`;
-    }
-
-    if (
-      selectedMode === "round" &&
-      round.length > 0 &&
-      currentSong === null &&
-      breakTimeLeft === null
-    ) {
-      return "Press play to begin round";
-    }
-
-    if (currentSong) {
-      const currentDance = currentSong.dance ?? "Song";
-      return `${currentDance} playing`;
-    }
-
-    return null;
-  })();
+  if (breakTimeLeft !== null) {
+    nextSongCountdownLabel = `${upcomingDance ?? "Next song"} starts in: ${breakTimeLeft} seconds`;
+  } else if (
+    selectedMode === "round" &&
+    round.length > 0 &&
+    currentSong === null &&
+    breakTimeLeft === null
+  ) {
+    nextSongCountdownLabel = "Press play to begin round";
+  } else if (currentSong) {
+    const currentDance = currentSong.dance ?? "Song";
+    nextSongCountdownLabel = `${currentDance} playing`;
+  }
 
 const roundTransportControls =
       selectedMode === "round"
@@ -2212,7 +2205,6 @@ const roundTransportControls =
                 flexDirection: "column",
                 alignItems: "center",
                 gap: 0,
-                marginTop: "1.5rem",
               }}
             >
             <div
@@ -2334,7 +2326,6 @@ const roundTransportControls =
                 flexDirection: "column",
                 alignItems: "center",
                 gap: 0,
-                marginTop: "1.5rem",
               }}
             >
             <div
@@ -2531,7 +2522,8 @@ const roundTransportControls =
       <header className="app-header">
         <div className="app-header-section app-header-section--left">
           <h1 className="app-title app-title-floating">
-            Muzon App<span className="app-subtitle"> - Ballroom DJ</span>
+            Muzon <span className="app-title-app">App</span>
+            <span className="app-subtitle"> - Ballroom DJ</span>
           </h1>
         </div>
         <div className="app-header-meta">

@@ -13,7 +13,7 @@ const {
 const { sendFeedbackEmail } = require("./email/sendFeedbackEmail");
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 const rawClientOrigins = process.env.CLIENT_ORIGIN || "http://localhost:5173";
 const allowedOrigins = rawClientOrigins
   .split(",")
