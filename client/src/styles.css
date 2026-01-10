@@ -612,6 +612,10 @@ textarea {
 }
 
 .round-queue-container {
+  --round-queue-visible-items: 5;
+  --round-queue-item-size: 44px;
+  --round-queue-item-padding-y: 0.25rem;
+  --round-queue-item-gap: 0.25rem;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
@@ -619,6 +623,13 @@ textarea {
   max-width: 100%;
   box-sizing: border-box;
   padding: 0.85rem 1rem;
+  height: calc(
+    (var(--round-queue-visible-items) *
+        (var(--round-queue-item-size) + (var(--round-queue-item-padding-y) * 2))) +
+      ((var(--round-queue-visible-items) - 1) * var(--round-queue-item-gap)) +
+      (2 * 0.85rem)
+  );
+  overflow: auto;
   background-color: rgba(48, 51, 58, 0.7);
   border-radius: 1.5rem;
   box-shadow:

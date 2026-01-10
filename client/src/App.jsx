@@ -190,6 +190,43 @@ function formatTime(timeInSeconds) {
   return `${minutes}:${seconds}`;
 }
 
+function getAudioDurationSeconds(fileUrl, timeoutMs = 8000) {
+  if (!fileUrl) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    const audio = new Audio();
+    let settled = false;
+    const settle = (value) => {
+      if (settled) return;
+      settled = true;
+      audio.removeEventListener("loadedmetadata", onLoaded);
+      audio.removeEventListener("error", onError);
+      audio.removeEventListener("abort", onError);
+      audio.src = "";
+      resolve(value);
+    };
+    const handleLoaded = () => {
+      const seconds = Number.isFinite(audio.duration) ? audio.duration : null;
+      settle(seconds);
+    };
+    const handleError = () => settle(null);
+    const timer = setTimeout(() => settle(null), timeoutMs);
+    const onLoaded = () => {
+      clearTimeout(timer);
+      handleLoaded();
+    };
+    const onError = () => {
+      clearTimeout(timer);
+      handleError();
+    };
+    audio.addEventListener("loadedmetadata", onLoaded);
+    audio.addEventListener("error", onError);
+    audio.addEventListener("abort", onError);
+    audio.preload = "metadata";
+    audio.src = fileUrl;
+    audio.load();
+  });
+}
+
 function PlayerApp() {
   const {
     isAuthenticated,
@@ -244,9 +281,67 @@ function PlayerApp() {
   );
   const [isAuthMenuOpen, setIsAuthMenuOpen] = useState(false);
   const roundRepeatCount = ROUND_HEAT_REPEAT_MAP[roundHeatMode] ?? 1;
+  const isPracticeMode = selectedMode === "practice";
+  const isPracticeFullSongSelection =
+    isPracticeMode && songDurationSeconds >= SONG_MAX_SECONDS;
+  const minSongDurationMs = songDurationSeconds * 1000;
+  const isTrackLongEnough = useCallback(
+    (track) => {
+      const durationMs = track?.durationMs;
+      if (!Number.isFinite(durationMs)) {
+        return true;
+      }
+      return durationMs >= minSongDurationMs;
+    },
+    [minSongDurationMs],
+  );
+  const isPracticeTrackAllowed = useCallback(
+    (track) => {
+      if (isPracticeFullSongSelection) {
+        return true;
+      }
+      return isTrackLongEnough(track);
+    },
+    [isPracticeFullSongSelection, isTrackLongEnough],
+  );
+  const hydrateTrackDurations = useCallback(async (tracks) => {
+    const hydrated = await Promise.all(
+      tracks.map(async (track) => {
+        if (!track || Number.isFinite(track.durationMs)) {
+          return track;
+        }
+        const durationSeconds = await getAudioDurationSeconds(track.file);
+        if (!Number.isFinite(durationSeconds)) {
+          return track;
+        }
+        const startSeconds = msToSeconds(track.startMs ?? null) ?? 0;
+        const effectiveSeconds = Math.max(durationSeconds - startSeconds, 0);
+        return {
+          ...track,
+          durationMs: Math.round(effectiveSeconds * 1000),
+        };
+      }),
+    );
+    return hydrated;
+  }, []);
+  const getTrackKey = useCallback((track, index) => {
+    if (!track) return `null-${index}`;
+    return (
+      track.id ??
+      track.songId ??
+      track.storagePath ??
+      track.file ??
+      track.filename ??
+      `track-${index}`
+    );
+  }, []);
+  const filteredRoundSource = useMemo(
+    () => roundSource.filter((track) => isTrackLongEnough(track)),
+    [isTrackLongEnough, roundSource],
+  );
   const round = useMemo(
-    () => buildExpandedRound(roundSource, roundRepeatCount),
-    [roundSource, roundRepeatCount],
+    () => buildExpandedRound(filteredRoundSource, roundRepeatCount),
+    [filteredRoundSource, roundRepeatCount],
   );
   const roundPlaybackRate = useMemo(() => {
     const clampedPercent = Math.min(
@@ -306,11 +401,14 @@ function PlayerApp() {
   const hasPrimedAudioRef = useRef(false);
   const practiceAudioRef = useRef(null);
   const practiceAdvancingRef = useRef(false);
+  const practiceQueueContainerRef = useRef(null);
+  const roundQueueContainerRef = useRef(null);
   const pendingRoundStyleRef = useRef(null);
   const authPromptReasonRef = useRef(null);
   const authPromptTimeoutRef = useRef(null);
   const authMenuContainerRef = useRef(null);
   const userSelectedCrashRef = useRef(false);
+  const roundReplacementRequestsRef = useRef(new Set());
 
   // Prevent duplicate advancing
   const advancingRef = useRef(false);
@@ -539,6 +637,31 @@ function PlayerApp() {
       return Math.min(...candidates);
     },
     [getActiveCrashDurationFromClip, isLatinRoundMode, songDurationSeconds],
+  );
+  const getPracticeDurationLimitSeconds = useCallback(
+    (track, sliderOverrideSeconds = songDurationSeconds) => {
+      const clipDuration = getClipDurationSeconds(track);
+      const crashDuration = getActiveCrashDurationFromClip(track);
+      const sliderDuration =
+        isPasoPracticeContext || isPracticeFullSongSelection ? null : sliderOverrideSeconds;
+
+      const candidates = [];
+      if (clipDuration != null) candidates.push(clipDuration);
+      if (crashDuration != null) candidates.push(crashDuration);
+      if (sliderDuration != null) candidates.push(sliderDuration);
+
+      if (candidates.length === 0) {
+        return songDurationSeconds;
+      }
+
+      return Math.min(...candidates);
+    },
+    [
+      getActiveCrashDurationFromClip,
+      isPasoPracticeContext,
+      isPracticeFullSongSelection,
+      songDurationSeconds,
+    ],
   );
 
   const schedulePlayTimeout = (durationOverrideSeconds = songDurationSeconds) => {
@@ -975,7 +1098,21 @@ function PlayerApp() {
         throw new Error("No tracks available");
       }
 
-      setPracticePlaylist({ ...payload, style: selectedStyle });
+      const tracksForFilter = isPracticeFullSongSelection
+        ? payload.tracks
+        : await hydrateTrackDurations(payload.tracks);
+      const filteredTracks = tracksForFilter.filter((track) =>
+        isPracticeTrackAllowed(track),
+      );
+      if (filteredTracks.length === 0) {
+        throw new Error("No tracks match the current song length");
+      }
+
+      setPracticePlaylist({
+        ...payload,
+        tracks: filteredTracks,
+        style: selectedStyle,
+      });
       console.debug("[practice] playlist set", {
         danceId,
         trackCount: payload.tracks.length,
@@ -1433,6 +1570,301 @@ function PlayerApp() {
   ]);
 
   useEffect(() => {
+    if (!roundSource.length) {
+      return;
+    }
+    let isCancelled = false;
+    const hydrateRoundTracks = async () => {
+      const hydratedTracks = await hydrateTrackDurations(roundSource);
+      if (isCancelled) return;
+      const hasHydratedDurations = roundSource.some((track, index) => {
+        const sourceDuration = track?.durationMs;
+        const nextDuration = hydratedTracks[index]?.durationMs;
+        return !Number.isFinite(sourceDuration) && Number.isFinite(nextDuration);
+      });
+      if (!hasHydratedDurations) {
+        return;
+      }
+      const currentKeys = roundSource.map(getTrackKey).join("|");
+      const hydratedKeys = hydratedTracks.map(getTrackKey).join("|");
+      if (currentKeys !== hydratedKeys) {
+        return;
+      }
+      setRoundSource((prev) => {
+        if (!prev?.length) return prev;
+        const prevKeys = prev.map(getTrackKey).join("|");
+        if (prevKeys !== hydratedKeys) {
+          return prev;
+        }
+        return hydratedTracks;
+      });
+    };
+
+    hydrateRoundTracks();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [getTrackKey, hydrateTrackDurations, roundSource]);
+
+  useEffect(() => {
+    roundReplacementRequestsRef.current.clear();
+  }, [roundSource, selectedStyle, songDurationSeconds]);
+
+  useEffect(() => {
+    if (selectedMode !== "round") {
+      return;
+    }
+    if (!roundSource.length) {
+      return;
+    }
+    if (!selectedStyle) {
+      return;
+    }
+    const minDurationMs = songDurationSeconds * 1000;
+    if (!Number.isFinite(minDurationMs) || minDurationMs <= 0) {
+      return;
+    }
+
+    let isCancelled = false;
+
+    const replaceTooShortTracks = async () => {
+      const tracksForCheck = await hydrateTrackDurations(roundSource);
+      if (isCancelled) return;
+      const hasHydratedDurations = roundSource.some((track, index) => {
+        const sourceDuration = track?.durationMs;
+        const nextDuration = tracksForCheck[index]?.durationMs;
+        return !Number.isFinite(sourceDuration) && Number.isFinite(nextDuration);
+      });
+      if (hasHydratedDurations) {
+        const currentKeys = roundSource.map(getTrackKey).join("|");
+        const hydratedKeys = tracksForCheck.map(getTrackKey).join("|");
+        if (currentKeys === hydratedKeys) {
+          setRoundSource((prev) => {
+            if (!prev?.length) return prev;
+            const prevKeys = prev.map(getTrackKey).join("|");
+            if (prevKeys !== hydratedKeys) {
+              return prev;
+            }
+            return tracksForCheck;
+          });
+        }
+      }
+
+      const candidates = tracksForCheck
+        .map((track, index) => {
+          const durationMs = track?.durationMs;
+          if (!Number.isFinite(durationMs) || durationMs >= minDurationMs) {
+            return null;
+          }
+          const danceId = track?.danceId;
+          if (!danceId) {
+            return null;
+          }
+          const targetKey = getTrackKey(track, index);
+          const requestKey = `${danceId}:${minDurationMs}:${targetKey}`;
+          if (roundReplacementRequestsRef.current.has(requestKey)) {
+            return null;
+          }
+          roundReplacementRequestsRef.current.add(requestKey);
+          return {
+            index,
+            danceId,
+            targetKey,
+            excludeId: track?.songId ?? track?.id ?? null,
+            excludeStoragePath: track?.storagePath ?? null,
+          };
+        })
+        .filter(Boolean);
+
+      if (!candidates.length) {
+        return;
+      }
+
+      const replacements = await Promise.all(
+        candidates.map(async (candidate) => {
+          const excludeIds = new Set();
+          const excludeStoragePaths = new Set();
+          if (candidate.excludeId) excludeIds.add(candidate.excludeId);
+          if (candidate.excludeStoragePath) excludeStoragePaths.add(candidate.excludeStoragePath);
+          const maxAttempts = 3;
+
+          for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+            const params = new URLSearchParams({
+              style: selectedStyle,
+              dance: candidate.danceId,
+              minDurationMs: String(minDurationMs),
+            });
+            if (excludeIds.size > 0) {
+              params.set("excludeIds", Array.from(excludeIds).join(","));
+            }
+            if (excludeStoragePaths.size > 0) {
+              params.set("excludeStoragePaths", Array.from(excludeStoragePaths).join(","));
+            }
+
+            try {
+              const res = await fetchWithOrigin(
+                `/api/round/replacement?${params.toString()}`,
+                { credentials: "include" },
+              );
+              if (!res.ok) {
+                return null;
+              }
+              const payload = await res.json();
+              const replacement = payload?.track ?? null;
+              if (!replacement) {
+                return null;
+              }
+
+              let replacementDurationMs = replacement.durationMs;
+              if (!Number.isFinite(replacementDurationMs)) {
+                const durationSeconds = await getAudioDurationSeconds(replacement.file);
+                if (Number.isFinite(durationSeconds)) {
+                  const startSeconds = msToSeconds(replacement.startMs ?? null) ?? 0;
+                  replacementDurationMs = Math.round(
+                    Math.max(durationSeconds - startSeconds, 0) * 1000,
+                  );
+                }
+              }
+
+              if (!Number.isFinite(replacementDurationMs)) {
+                if (replacement.songId) excludeIds.add(replacement.songId);
+                if (replacement.id) excludeIds.add(replacement.id);
+                if (replacement.storagePath) excludeStoragePaths.add(replacement.storagePath);
+                continue;
+              }
+
+              if (replacementDurationMs < minDurationMs) {
+                if (replacement.songId) excludeIds.add(replacement.songId);
+                if (replacement.id) excludeIds.add(replacement.id);
+                if (replacement.storagePath) excludeStoragePaths.add(replacement.storagePath);
+                continue;
+              }
+
+              return {
+                ...candidate,
+                replacement: { ...replacement, durationMs: replacementDurationMs },
+              };
+            } catch (err) {
+              console.warn("Failed to replace round track", err);
+              return null;
+            }
+          }
+
+          return null;
+        }),
+      );
+
+      if (isCancelled) {
+        return;
+      }
+
+      const validReplacements = replacements.filter(Boolean);
+      if (!validReplacements.length) {
+        return;
+      }
+
+      setRoundSource((prev) => {
+        if (!prev?.length) return prev;
+        let didChange = false;
+        const next = prev.map((track, index) => {
+          const match = validReplacements.find((item) => item.index === index);
+          if (!match) return track;
+          const currentKey = getTrackKey(track, index);
+          if (currentKey !== match.targetKey) {
+            return track;
+          }
+          didChange = true;
+          return match.replacement;
+        });
+        return didChange ? next : prev;
+      });
+    };
+
+    replaceTooShortTracks();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [
+    getTrackKey,
+    hydrateTrackDurations,
+    roundSource,
+    selectedMode,
+    selectedStyle,
+    songDurationSeconds,
+  ]);
+
+  useEffect(() => {
+    if (selectedMode !== "practice") {
+      return;
+    }
+    if (!practicePlaylist?.tracks?.length) {
+      return;
+    }
+
+    let isCancelled = false;
+
+    const refilterPracticeTracks = async () => {
+      const sourceTracks = practicePlaylist.tracks;
+      const tracksForFilter = isPracticeFullSongSelection
+        ? sourceTracks
+        : await hydrateTrackDurations(sourceTracks);
+      if (isCancelled) return;
+      const filteredTracks = tracksForFilter.filter((track) =>
+        isPracticeTrackAllowed(track),
+      );
+      if (filteredTracks.length === 0) {
+        return;
+      }
+      const hasHydratedDurations = sourceTracks.some((track, index) => {
+        const sourceDuration = track?.durationMs;
+        const nextDuration = tracksForFilter[index]?.durationMs;
+        return !Number.isFinite(sourceDuration) && Number.isFinite(nextDuration);
+      });
+      const nextKeys = filteredTracks.map(getTrackKey).join("|");
+      const currentKeys = sourceTracks.map(getTrackKey).join("|");
+      if (nextKeys === currentKeys && !hasHydratedDurations) {
+        return;
+      }
+      const nextTracks =
+        nextKeys === currentKeys && hasHydratedDurations
+          ? tracksForFilter
+          : filteredTracks;
+      setPracticePlaylist((prev) => {
+        if (!prev) return prev;
+        const prevKeys = prev.tracks?.map(getTrackKey).join("|");
+        if (prevKeys === nextKeys && !hasHydratedDurations) {
+          return prev;
+        }
+        return { ...prev, tracks: nextTracks };
+      });
+      if (nextTracks !== sourceTracks) {
+        setPracticeTrackIndex((prevIndex) => {
+          if (prevIndex < nextTracks.length) {
+            return prevIndex;
+          }
+          return 0;
+        });
+      }
+    };
+
+    refilterPracticeTracks();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [
+    getTrackKey,
+    hydrateTrackDurations,
+    isPracticeFullSongSelection,
+    isPracticeTrackAllowed,
+    practicePlaylist,
+    selectedMode,
+    songDurationSeconds,
+  ]);
+
+  useEffect(() => {
     if (round.length === 0) {
       return;
     }
@@ -1588,16 +2020,30 @@ function PlayerApp() {
     const clipEndSeconds = getClipEndSeconds(track);
     const crashSeconds = getActiveCrashSeconds(track);
     const currentSeconds = audio.currentTime || 0;
+    const shouldRespectPracticeCutoffs = !isPracticeFullSongSelection;
 
-    setPracticeCurrentTime(Math.max(currentSeconds - clipStartSeconds, 0));
+    const elapsedSeconds = Math.max(currentSeconds - clipStartSeconds, 0);
+    setPracticeCurrentTime(elapsedSeconds);
 
-    const reachedClip = clipEndSeconds != null && currentSeconds >= clipEndSeconds - 0.05;
-    const reachedCrash = crashSeconds != null && currentSeconds >= crashSeconds - 0.05;
+    const reachedClip =
+      shouldRespectPracticeCutoffs &&
+      clipEndSeconds != null &&
+      currentSeconds >= clipEndSeconds - 0.05;
+    const reachedCrash =
+      shouldRespectPracticeCutoffs &&
+      crashSeconds != null &&
+      currentSeconds >= crashSeconds - 0.05;
+    const durationLimit = shouldRespectPracticeCutoffs
+      ? getPracticeDurationLimitSeconds(track)
+      : null;
+    const reachedLimit =
+      durationLimit != null && elapsedSeconds >= durationLimit - 0.05;
 
-    if (reachedClip || reachedCrash) {
+    if (reachedClip || reachedCrash || reachedLimit) {
       console.debug("[practice] reached cutoff", {
         reachedClip,
         reachedCrash,
+        reachedLimit,
         currentSeconds,
         crashSeconds,
         clipEndSeconds,
@@ -1631,17 +2077,51 @@ function PlayerApp() {
     }
 
     const rawDuration = Number.isFinite(audio.duration) ? audio.duration : 0;
-    const clipDuration = getClipDurationSeconds(track);
-    let effectiveDuration =
-      clipDuration != null ? Math.min(rawDuration, clipDuration) : rawDuration;
-    const crashDuration = getActiveCrashDurationFromClip(track);
-    if (crashDuration != null) {
-      effectiveDuration = Math.min(effectiveDuration, crashDuration);
+    let effectiveDuration = rawDuration;
+    if (isPracticeFullSongSelection) {
+      effectiveDuration = Math.max(rawDuration - clipStartSeconds, 0);
+    } else {
+      const clipDuration = getClipDurationSeconds(track);
+      effectiveDuration =
+        clipDuration != null ? Math.min(rawDuration, clipDuration) : rawDuration;
+      const crashDuration = getActiveCrashDurationFromClip(track);
+      if (crashDuration != null) {
+        effectiveDuration = Math.min(effectiveDuration, crashDuration);
+      }
+    }
+    if (!isPracticeFullSongSelection) {
+      const durationLimit = getPracticeDurationLimitSeconds(track);
+      if (durationLimit != null) {
+        effectiveDuration = Math.min(effectiveDuration, durationLimit);
+      }
     }
 
     setPracticeDuration(effectiveDuration || 0);
     setPracticeCurrentTime(0);
   };
+
+  useEffect(() => {
+    if (!practiceIsPlaying || !currentPracticeTrack) {
+      return;
+    }
+    const durationLimit = getPracticeDurationLimitSeconds(currentPracticeTrack);
+    if (durationLimit == null) {
+      return;
+    }
+    if (practiceCurrentTime >= durationLimit - 0.05) {
+      const audio = practiceAudioRef.current;
+      if (audio) {
+        audio.pause();
+      }
+      handlePracticeTrackCompletion();
+    }
+  }, [
+    currentPracticeTrack,
+    getPracticeDurationLimitSeconds,
+    handlePracticeTrackCompletion,
+    practiceCurrentTime,
+    practiceIsPlaying,
+  ]);
 
   const renderOnboardingIndicators = (activeStep) => (
     <div
@@ -1779,16 +2259,22 @@ function PlayerApp() {
   const practiceCanGoPrevious = practicePlaylistLength > 0;
   const practiceCanGoNext =
     practicePlaylistLength > 0 && practiceTrackIndex < practicePlaylistLength - 1;
-  const practiceNowPlayingLabel = (() => {
-    if (currentPracticeTrack?.file) {
-      return getDisplayName(currentPracticeTrack.file);
+  const practiceNowPlayingInfo = (() => {
+    if (currentPracticeTrack) {
+      const title = getTrackTitle(currentPracticeTrack);
+      const artist = getTrackArtist(currentPracticeTrack);
+      const fallback = currentPracticeTrack.file ? getDisplayName(currentPracticeTrack.file) : "";
+      const labelTitle = title || fallback || "Unknown track";
+      return { title: labelTitle, artist: artist || "" };
     }
     if (practicePlaylistLength > 0) {
-      return `Practice playlist ready (${practicePlaylistLength} track${
-        practicePlaylistLength === 1 ? "" : "s"
-      })`;
+      return {
+        label: `Practice playlist ready (${practicePlaylistLength} track${
+          practicePlaylistLength === 1 ? "" : "s"
+        })`,
+      };
     }
-    return "Practice not loaded yet";
+    return { label: "Practice not loaded yet" };
   })();
   const practiceStartButtonIcon = practiceIsPlaying ? (
     <PauseIcon className="round-control-icon--primary" />
@@ -1982,6 +2468,69 @@ function PlayerApp() {
     () => (roundPasoReferenceTrack ? getCrashOptions(roundPasoReferenceTrack) : []),
     [roundPasoReferenceTrack],
   );
+  useEffect(() => {
+    if (selectedMode !== "round" || !isPlaying || breakTimeLeft !== null) {
+      return;
+    }
+    if (currentIndex === null) {
+      return;
+    }
+    const container = roundQueueContainerRef.current;
+    if (!container) {
+      return;
+    }
+    const list = container.querySelector(".round-queue-list");
+    if (!list) {
+      return;
+    }
+    const items = list.children;
+    const firstItem = items[0];
+    if (!firstItem) {
+      return;
+    }
+    const secondItem = items[1];
+    const firstRect = firstItem.getBoundingClientRect();
+    const step = secondItem
+      ? secondItem.getBoundingClientRect().top - firstRect.top
+      : firstRect.height;
+    if (step <= 0) {
+      return;
+    }
+    container.scrollTo({
+      top: Math.max(0, step * currentIndex),
+      behavior: "smooth",
+    });
+  }, [breakTimeLeft, currentIndex, isPlaying, selectedMode]);
+  useEffect(() => {
+    if (selectedMode !== "practice" || !practiceIsPlaying) {
+      return;
+    }
+    const container = practiceQueueContainerRef.current;
+    if (!container) {
+      return;
+    }
+    const list = container.querySelector(".round-queue-list");
+    if (!list) {
+      return;
+    }
+    const items = list.children;
+    const firstItem = items[0];
+    if (!firstItem) {
+      return;
+    }
+    const secondItem = items[1];
+    const firstRect = firstItem.getBoundingClientRect();
+    const step = secondItem
+      ? secondItem.getBoundingClientRect().top - firstRect.top
+      : firstRect.height;
+    if (step <= 0) {
+      return;
+    }
+    container.scrollTo({
+      top: Math.max(0, step * practiceTrackIndex),
+      behavior: "smooth",
+    });
+  }, [practiceIsPlaying, practiceTrackIndex, selectedMode]);
   const handleSelectCrash = (crashId) => {
     userSelectedCrashRef.current = true;
     setSelectedCrash(crashId);
@@ -2089,7 +2638,7 @@ function PlayerApp() {
           </div>
           {isPasoPracticeContext ? pasoPracticeCrashButtonsMarkup : null}
         </div>
-        {!isPasoPracticeContext && (
+        {!isPasoPracticeContext && !isPracticeMode && (
           <div>
             <div className="slider-label-row">
               <label htmlFor="song-duration-slider">Song Length</label>
@@ -2109,6 +2658,31 @@ function PlayerApp() {
                 if (isPlaying) {
                   schedulePlayTimeout(getRoundDurationLimitSeconds(currentSong, nextValue));
                 }
+              }}
+            />
+          </div>
+        )}
+        {!isPasoPracticeContext && isPracticeMode && (
+          <div>
+            <div className="slider-label-row">
+              <label htmlFor="song-duration-slider">Song Length</label>
+              <span className="slider-value">
+                {isPracticeFullSongSelection
+                  ? "Full Song"
+                  : formatTime(songDurationSeconds)}
+              </span>
+            </div>
+            <input
+              id="song-duration-slider"
+              type="range"
+              min={SONG_MIN_SECONDS}
+              max={SONG_MAX_SECONDS}
+              step={SONG_STEP_SECONDS}
+              value={songDurationSeconds}
+              className="neomorphus-slider"
+              onChange={(e) => {
+                const nextValue = Number(e.target.value);
+                setSongDurationSeconds(nextValue);
               }}
             />
           </div>
@@ -2342,13 +2916,23 @@ const roundTransportControls =
               <div
                 style={{
                   textAlign: "center",
-                  fontWeight: 600,
+                  fontWeight: 400,
+                  fontSize: "0.9rem",
                   width: "100%",
-                  color: currentPracticeTrack ? HIGHLIGHT_COLOR : TEXT_COLOR,
+                  color: "rgba(255, 255, 255, 0.65)",
                   opacity: practicePlaylistLength === 0 ? 0.75 : 1,
                 }}
               >
-                {practiceNowPlayingLabel}
+                {practiceNowPlayingInfo.label ? (
+                  practiceNowPlayingInfo.label
+                ) : (
+                  <>
+                    <span>{practiceNowPlayingInfo.title}</span>
+                    {practiceNowPlayingInfo.artist ? (
+                      <span> - {practiceNowPlayingInfo.artist}</span>
+                    ) : null}
+                  </>
+                )}
               </div>
               <div
                 style={{
@@ -2696,14 +3280,16 @@ const roundTransportControls =
                   <div className="practice-song-type-panel">
                     <div className="round-queue-wrapper">
                       <h4 className="round-queue-heading">Queue</h4>
-                      <div className="round-queue-container">{practiceQueueContent}</div>
+                      <div className="round-queue-container" ref={practiceQueueContainerRef}>
+                        {practiceQueueContent}
+                      </div>
                     </div>
                   </div>
                 ) : selectedMode === "round" ? (
                   roundAuthBlocked ? (
                     <div className="round-queue-wrapper">
                       <h4 className="round-queue-heading">Queue</h4>
-                      <div className="round-queue-container">
+                      <div className="round-queue-container" ref={roundQueueContainerRef}>
                         {round.length > 0 ? (
                           <ul className="round-queue-list">
                             {round.map((s, i) => (
@@ -2751,7 +3337,7 @@ const roundTransportControls =
                   ) : (
                     <div className="round-queue-wrapper">
                       <h4 className="round-queue-heading">Queue</h4>
-                      <div className="round-queue-container">
+                      <div className="round-queue-container" ref={roundQueueContainerRef}>
                         {round.length > 0 ? (
                           <ul className="round-queue-list">
                             {round.map((s, i) => (

@@ -577,6 +577,122 @@ app.get("/api/round", async (req, res) => {
   }
 });
 
+app.get("/api/round/replacement", async (req, res) => {
+  try {
+    const requestedStyle = (req.query.style || "ballroom").toLowerCase();
+    const danceId = typeof req.query.dance === "string" ? req.query.dance : "";
+    const minDurationMs = Number(req.query.minDurationMs);
+    const excludeId = typeof req.query.excludeId === "string" ? req.query.excludeId : null;
+    const excludeStoragePath =
+      typeof req.query.excludeStoragePath === "string" ? req.query.excludeStoragePath : null;
+    const excludeIds = typeof req.query.excludeIds === "string"
+      ? req.query.excludeIds.split(",").map((value) => value.trim()).filter(Boolean)
+      : [];
+    const excludeStoragePaths = typeof req.query.excludeStoragePaths === "string"
+      ? req.query.excludeStoragePaths.split(",").map((value) => value.trim()).filter(Boolean)
+      : [];
+    const config = STYLE_CONFIG[requestedStyle];
+
+    if (!config) {
+      res
+        .status(400)
+        .json({ error: `Unsupported style '${req.query.style ?? ""}'` });
+      return;
+    }
+
+    const danceConfig = config.dances.find((dance) => dance.folder === danceId);
+    if (!danceConfig) {
+      res.status(400).json({ error: `Unsupported dance '${danceId}'` });
+      return;
+    }
+
+    let songs = [];
+    try {
+      songs = await listSongDocuments();
+    } catch (firestoreError) {
+      console.error("Failed to list songs from Firestore", firestoreError);
+      songs = [];
+    }
+
+    const matchingSongs = songs.filter((song) => {
+      if (song.styleId !== requestedStyle || song.danceId !== danceId) {
+        return false;
+      }
+      if (excludeId && song.id === excludeId) {
+        return false;
+      }
+      if (excludeStoragePath && song.storagePath === excludeStoragePath) {
+        return false;
+      }
+      if (excludeIds.length && excludeIds.includes(song.id)) {
+        return false;
+      }
+      if (excludeStoragePaths.length && excludeStoragePaths.includes(song.storagePath)) {
+        return false;
+      }
+      return true;
+    });
+
+    if (matchingSongs.length === 0) {
+      res.status(404).json({ error: "No matching replacement found" });
+      return;
+    }
+
+    let candidates = matchingSongs;
+    if (Number.isFinite(minDurationMs)) {
+      const durationMatches = matchingSongs.filter(
+        (song) => typeof song.durationMs === "number" && song.durationMs >= minDurationMs
+      );
+      if (durationMatches.length > 0) {
+        candidates = durationMatches;
+      }
+    }
+
+    const shuffled = [...candidates];
+    for (let i = shuffled.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+
+    let track = null;
+    for (const candidate of shuffled) {
+      const candidateTrack = await buildSongResponse(candidate);
+      if (candidateTrack) {
+        track = candidateTrack;
+        break;
+      }
+    }
+
+    if (!track) {
+      res.status(404).json({ error: "No replacement found" });
+      return;
+    }
+
+    res.json({
+      track: {
+        dance: danceConfig.label,
+        danceId,
+        file: track.url ?? null,
+        songId: track.id ?? null,
+        title: track.title ?? null,
+        artist: track.artist ?? null,
+        bpm: track.bpm ?? null,
+        startMs: track.startMs ?? null,
+        endMs: track.endMs ?? null,
+        durationMs: track.durationMs ?? null,
+        storagePath: track.storagePath ?? null,
+        filename: track.filename ?? null,
+        crash1Ms: track.crash1Ms ?? null,
+        crash2Ms: track.crash2Ms ?? null,
+        crash3Ms: track.crash3Ms ?? null,
+      },
+    });
+  } catch (err) {
+    console.error("❌ Error generating round replacement:", err);
+    res.status(500).json({ error: "Failed to generate replacement" });
+  }
+});
+
 app.get("/api/dances", (req, res) => {
   const requestedStyle = (req.query.style || "ballroom").toLowerCase();
   const config = STYLE_CONFIG[requestedStyle];
