@@ -62,9 +62,29 @@ const SPEED_MIN_PERCENT = 50;
 const SPEED_MAX_PERCENT = 120;
 const SPEED_STEP_PERCENT = 1;
 const DEFAULT_SPEED_PERCENT = 100;
+const DANCE_SHORT_LABELS = {
+  waltz: "W",
+  tango: "T",
+  "viennese waltz": "VW",
+  foxtrot: "F",
+  quickstep: "Q",
+  chacha: "C",
+  "cha cha": "C",
+  samba: "S",
+  rumba: "R",
+  paso: "PD",
+  "paso doble": "PD",
+  jive: "J",
+};
 const BACKGROUND_COLOR = "#30333a";
 const TEXT_COLOR = "#f2f4f7";
 const HIGHLIGHT_COLOR = "#25ed27";
+
+function getDanceLabel(label, useShort) {
+  if (!useShort || !label) return label;
+  const key = label.trim().toLowerCase();
+  return DANCE_SHORT_LABELS[key] ?? label;
+}
 
 function PlayIcon({ className, ...props }) {
   return (
@@ -1606,7 +1626,9 @@ function Player() {
                     disabled={practiceLoadingDance === dance.id || practiceDancesLoading}
                     onClick={() => handlePracticeRequest(dance.id)}
                   >
-                    {practiceLoadingDance === dance.id ? "Loading..." : dance.label}
+                    {practiceLoadingDance === dance.id
+                      ? "Loading..."
+                      : getDanceLabel(dance.label, isNarrowLayout)}
                   </button>
                 ))}
               </div>

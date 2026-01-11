@@ -538,6 +538,10 @@ textarea {
   white-space: nowrap;
 }
 
+.style-label-short {
+  display: none;
+}
+
 .style-button:hover:not(:disabled) {
   color: #f2f4f7;
   box-shadow: none;
@@ -931,6 +935,40 @@ textarea {
 
   .round-queue-heading {
     display: none;
+  }
+
+  .app-menu-button {
+    min-width: auto;
+    padding: 0.45rem 0.65rem;
+  }
+
+  .app-menu-label {
+    display: none;
+  }
+
+  .app-menu-icon {
+    display: flex;
+  }
+
+  .style-label-full {
+    display: none;
+  }
+
+  .style-label-short {
+    display: inline;
+  }
+
+  .style-button,
+  .welcome-dance-button {
+    flex-direction: column;
+    gap: 0.1rem;
+  }
+
+  .style-coming-soon {
+    display: block;
+    margin-left: 0;
+    margin-top: 0.15rem;
+    line-height: 1.1;
   }
 }
 
@@ -1787,6 +1825,57 @@ textarea {
   padding: 0.5rem 0.9rem;
   font-size: 0.95rem;
   font-weight: 600;
+}
+
+.app-menu-icon {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.22rem;
+}
+
+.app-menu-icon span {
+  display: block;
+  width: 18px;
+  height: 2px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+@media (max-width: 800px) {
+  .app-menu-button {
+    min-width: auto;
+    padding: 0.45rem 0.65rem;
+    border: none;
+    box-shadow: none !important;
+    transition: none;
+  }
+
+  .app-menu-button:hover:not(:disabled) {
+    box-shadow: none !important;
+    transform: none;
+  }
+
+  .app-menu-button:focus-visible {
+    box-shadow: none !important;
+  }
+
+  .app-menu-button--open {
+    box-shadow: none !important;
+  }
+
+  .app-menu-button:active {
+    box-shadow: none !important;
+    transform: none;
+  }
+
+  .app-menu-label {
+    display: none;
+  }
+
+  .app-menu-icon {
+    display: flex;
+  }
 }
 
 .app-menu-button--open {
