@@ -952,7 +952,14 @@ app.post(
 
       res.json({ ok: true });
     } catch (err) {
-      console.error("Failed to send feedback email", err);
+      console.error("Failed to send feedback email", {
+        message: err?.message,
+        name: err?.name,
+        code: err?.code,
+        response: err?.response,
+        responseCode: err?.responseCode,
+        stack: err?.stack,
+      });
       res.status(500).json({
         error: "We couldn’t send that feedback right now. Please try again in a minute.",
       });

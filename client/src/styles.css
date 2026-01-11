@@ -927,6 +927,7 @@ textarea {
 
   .app-shell-settings {
     display: flex;
+    border-top: none;
   }
 
   .practice-dance-button-row--first {
@@ -956,6 +957,14 @@ textarea {
 
   .style-label-short {
     display: inline;
+  }
+
+  .welcome-dance-button .style-label-full {
+    display: inline;
+  }
+
+  .welcome-dance-button .style-label-short {
+    display: none;
   }
 
   .style-button,

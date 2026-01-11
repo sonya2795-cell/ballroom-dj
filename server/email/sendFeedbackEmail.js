@@ -48,6 +48,13 @@ function getTransporter() {
   const secure = toBool(process.env.SMTP_SECURE, port === 465);
 
   if (!host || !port) {
+    console.error("SMTP transport misconfigured", {
+      hasHost: Boolean(host),
+      port: Number.isFinite(port) ? port : null,
+      hasUser: Boolean(username),
+      hasPass: Boolean(password),
+      secure,
+    });
     throw new Error("SMTP_HOST and SMTP_PORT must be configured");
   }
 
@@ -64,6 +71,21 @@ function getTransporter() {
     port,
     secure,
     auth,
+  });
+
+  transporter.verify((err) => {
+    if (err) {
+      console.error("SMTP verification failed", {
+        message: err?.message,
+        name: err?.name,
+        code: err?.code,
+        response: err?.response,
+        responseCode: err?.responseCode,
+        stack: err?.stack,
+      });
+      return;
+    }
+    console.log("SMTP transport verified");
   });
 
   return transporter;
