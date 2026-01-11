@@ -65,7 +65,7 @@ const DEFAULT_SPEED_PERCENT = 100;
 const PREVIOUS_RESTART_THRESHOLD_SECONDS = 3;
 const BACKGROUND_COLOR = "#30333a";
 const TEXT_COLOR = "#f2f4f7";
-const HIGHLIGHT_COLOR = "#25ed75";
+const HIGHLIGHT_COLOR = "#25ed27";
 
 function PlayIcon({ className = "" }) {
   return (
@@ -253,6 +253,26 @@ function PlayerApp() {
   const [selectedMode, setSelectedMode] = useState(null);
   const [showWelcomeModal, setShowWelcomeModal] = useState(true);
   const [showModeModal, setShowModeModal] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isSettingsDragging, setIsSettingsDragging] = useState(false);
+  const [settingsDragOffset, setSettingsDragOffset] = useState(0);
+  const settingsDragStartYRef = useRef(0);
+  const settingsDragPointerIdRef = useRef(null);
+  const settingsDragHasCaptureRef = useRef(false);
+  const settingsModalContentRef = useRef(null);
+  const settingsButtonRef = useRef(null);
+  const settingsPanelRef = useRef(null);
+  const [settingsClosedOffset, setSettingsClosedOffset] = useState(null);
+  const settingsOpenDragStartYRef = useRef(0);
+  const settingsOpenPointerIdRef = useRef(null);
+  const settingsOpenDraggedRef = useRef(false);
+  const settingsOpenHasCaptureRef = useRef(false);
+  const [isNarrowLayout, setIsNarrowLayout] = useState(() => {
+    if (typeof window === "undefined") {
+      return false;
+    }
+    return window.matchMedia("(max-width: 800px)").matches;
+  });
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -335,6 +355,166 @@ function PlayerApp() {
       `track-${index}`
     );
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return undefined;
+    }
+    const mediaQuery = window.matchMedia("(max-width: 800px)");
+    const handleChange = (event) => setIsNarrowLayout(event.matches);
+
+    setIsNarrowLayout(mediaQuery.matches);
+    if (mediaQuery.addEventListener) {
+      mediaQuery.addEventListener("change", handleChange);
+    } else {
+      mediaQuery.addListener(handleChange);
+    }
+
+    return () => {
+      if (mediaQuery.removeEventListener) {
+        mediaQuery.removeEventListener("change", handleChange);
+      } else {
+        mediaQuery.removeListener(handleChange);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isNarrowLayout && isSettingsOpen) {
+      setIsSettingsOpen(false);
+    }
+  }, [isNarrowLayout, isSettingsOpen]);
+
+  useEffect(() => {
+    if (!isSettingsOpen) {
+      setSettingsDragOffset(0);
+      setIsSettingsDragging(false);
+      return undefined;
+    }
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setIsSettingsOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isSettingsOpen]);
+
+  const handleSettingsDragStart = (event) => {
+    if (!isSettingsOpen) {
+      return;
+    }
+    const handleElement = event.target.closest(".settings-modal-handle");
+    if (!handleElement) {
+      const interactiveElement = event.target.closest(
+        "button, a, input, select, textarea, label, [role='button'], [data-no-sheet-drag]",
+      );
+      if (interactiveElement) {
+        return;
+      }
+      const contentEl = settingsModalContentRef.current;
+      if (contentEl && contentEl.scrollTop > 0) {
+        return;
+      }
+    }
+    settingsDragPointerIdRef.current = event.pointerId;
+    settingsDragStartYRef.current = event.clientY;
+    settingsDragHasCaptureRef.current = false;
+    setIsSettingsDragging(false);
+  };
+
+  const handleSettingsDragMove = (event) => {
+    if (settingsDragPointerIdRef.current !== event.pointerId) {
+      return;
+    }
+    const delta = Math.max(event.clientY - settingsDragStartYRef.current, 0);
+    if (!isSettingsDragging) {
+      if (delta < 6) {
+        return;
+      }
+      setIsSettingsDragging(true);
+      if (!settingsDragHasCaptureRef.current) {
+        event.currentTarget.setPointerCapture(event.pointerId);
+        settingsDragHasCaptureRef.current = true;
+      }
+    }
+    setSettingsDragOffset(delta);
+  };
+
+  const handleSettingsDragEnd = (event) => {
+    if (settingsDragPointerIdRef.current !== event.pointerId) {
+      return;
+    }
+    const shouldClose = settingsDragOffset > 80;
+    settingsDragPointerIdRef.current = null;
+    if (settingsDragHasCaptureRef.current) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+      settingsDragHasCaptureRef.current = false;
+    }
+    setIsSettingsDragging(false);
+    setSettingsDragOffset(0);
+    if (shouldClose) {
+      setIsSettingsOpen(false);
+    }
+  };
+
+  const prepareSettingsOpen = () => {
+    if (typeof window === "undefined") {
+      setIsSettingsOpen(true);
+      return;
+    }
+    const button = settingsButtonRef.current;
+    const panel = settingsPanelRef.current;
+    if (button && panel) {
+      const buttonRect = button.getBoundingClientRect();
+      const panelRect = panel.getBoundingClientRect();
+      const offset = Math.max(
+        buttonRect.top + panelRect.height - window.innerHeight,
+        0,
+      );
+      setSettingsClosedOffset(offset);
+    }
+    setIsSettingsOpen(true);
+  };
+
+  const handleSettingsOpenDragStart = (event) => {
+    if (isSettingsOpen) {
+      return;
+    }
+    settingsOpenPointerIdRef.current = event.pointerId;
+    settingsOpenDragStartYRef.current = event.clientY;
+    settingsOpenDraggedRef.current = false;
+    settingsOpenHasCaptureRef.current = false;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    settingsOpenHasCaptureRef.current = true;
+  };
+
+  const handleSettingsOpenDragMove = (event) => {
+    if (settingsOpenPointerIdRef.current !== event.pointerId || isSettingsOpen) {
+      return;
+    }
+    const delta = settingsOpenDragStartYRef.current - event.clientY;
+    if (delta > 40) {
+      settingsOpenDraggedRef.current = true;
+      prepareSettingsOpen();
+      if (settingsOpenHasCaptureRef.current) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+        settingsOpenHasCaptureRef.current = false;
+      }
+      settingsOpenPointerIdRef.current = null;
+    }
+  };
+
+  const handleSettingsOpenDragEnd = (event) => {
+    if (settingsOpenPointerIdRef.current !== event.pointerId) {
+      return;
+    }
+    if (settingsOpenHasCaptureRef.current) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+      settingsOpenHasCaptureRef.current = false;
+    }
+    settingsOpenPointerIdRef.current = null;
+  };
   const filteredRoundSource = useMemo(
     () => roundSource.filter((track) => isTrackLongEnough(track)),
     [isTrackLongEnough, roundSource],
@@ -409,6 +589,8 @@ function PlayerApp() {
   const authMenuContainerRef = useRef(null);
   const userSelectedCrashRef = useRef(false);
   const roundReplacementRequestsRef = useRef(new Set());
+  const roundSongDurationRef = useRef(null);
+  const previousModeRef = useRef(null);
 
   // Prevent duplicate advancing
   const advancingRef = useRef(false);
@@ -1865,6 +2047,39 @@ function PlayerApp() {
   ]);
 
   useEffect(() => {
+    let targetDuration = null;
+    const previousMode = previousModeRef.current;
+
+    if (selectedMode === "practice" && previousMode !== "practice") {
+      if (previousMode === "round") {
+        roundSongDurationRef.current = songDurationSeconds;
+      }
+      targetDuration = SONG_MAX_SECONDS;
+    } else if (selectedMode === "round" && previousMode !== "round") {
+      if (roundSongDurationRef.current == null) {
+        roundSongDurationRef.current = 90;
+      }
+      targetDuration = roundSongDurationRef.current;
+    }
+
+    if (
+      targetDuration != null &&
+      Number.isFinite(targetDuration) &&
+      targetDuration !== songDurationSeconds
+    ) {
+      setSongDurationSeconds(targetDuration);
+    }
+
+    previousModeRef.current = selectedMode;
+  }, [selectedMode]);
+
+  useEffect(() => {
+    if (selectedMode === "round") {
+      roundSongDurationRef.current = songDurationSeconds;
+    }
+  }, [selectedMode, songDurationSeconds]);
+
+  useEffect(() => {
     if (round.length === 0) {
       return;
     }
@@ -2283,10 +2498,13 @@ function PlayerApp() {
   );
   const practiceDanceRows = useMemo(() => {
     if (!practiceDances.length) return [];
+    if (isNarrowLayout) {
+      return [practiceDances];
+    }
     const firstRow = practiceDances.slice(0, 3);
     const secondRow = practiceDances.slice(3);
     return [firstRow, secondRow].filter((row) => row.length > 0);
-  }, [practiceDances]);
+  }, [isNarrowLayout, practiceDances]);
 
   const practiceDanceButtonsMarkup =
     practiceDanceRows.length > 0
@@ -2323,6 +2541,14 @@ function PlayerApp() {
         {practiceDancesLoading ? "Loading dances..." : "No dances available."}
       </p>
     );
+  const practiceDancePanel =
+    selectedMode === "practice" &&
+    selectedStyle &&
+    ENABLED_STYLE_IDS.has(selectedStyle) ? (
+      <div className="practice-song-type-panel practice-song-type-panel--left">
+        {practiceDanceContent}
+      </div>
+    ) : null;
   const practiceQueueContent =
     practicePlaylist?.tracks?.length
       ? (
@@ -3019,6 +3245,61 @@ const roundTransportControls =
         )
       : null;
 
+  const settingsBodyContent = (
+    <>
+      {durationControls}
+
+      {selectedMode === "practice" && selectedStyle && (
+        ENABLED_STYLE_IDS.has(selectedStyle) ? (
+          <div style={{ marginTop: "1rem" }}>
+            {practiceError && <p style={{ color: "#ff8080" }}>{practiceError}</p>}
+            {practiceDancesLoading && !practiceError && <p>Loading dances...</p>}
+            {practicePlaylist?.danceId?.toLowerCase() === "chacha" && null}
+
+            {currentPracticeTrack && currentPracticeTrack.file && (
+              <div style={{ marginTop: "1rem" }}>
+                <audio
+                  ref={practiceAudioRef}
+                  src={currentPracticeTrack.file}
+                  preload="auto"
+                  style={{ display: "none" }}
+                  onPlay={() => setPracticeIsPlaying(true)}
+                  onPause={() => setPracticeIsPlaying(false)}
+                  onLoadedMetadata={handlePracticeLoadedMetadata}
+                  onTimeUpdate={handlePracticeTimeUpdate}
+                  onEnded={handlePracticeTrackCompletion}
+                  onError={(e) =>
+                    console.error(
+                      "Practice audio error:",
+                      e,
+                      "URL:",
+                      currentPracticeTrack.file
+                    )
+                  }
+                />
+                {showPracticeControls && null}
+              </div>
+            )}
+            {practicePlaylist && (!practicePlaylist.tracks?.length || !currentPracticeTrack) && (
+              <p style={{ marginTop: "1rem" }}>
+                No tracks available right now for {practicePlaylist.dance}.
+              </p>
+            )}
+          </div>
+        ) : (
+          <p style={{ marginTop: "1rem" }}>
+            Practice mode for {
+              STYLE_OPTIONS.find((opt) => opt.id === selectedStyle)?.label ||
+              selectedStyle
+            } is not available yet.
+          </p>
+        )
+      )}
+
+      {!isNarrowLayout ? practiceDancePanel : null}
+    </>
+  );
+
   return (
     <>
       {showWelcomeModal && (
@@ -3195,85 +3476,53 @@ const roundTransportControls =
             ))}
           </div>
 
+          {selectedStyle && (
+            <div className="mode-row mode-row--mobile">
+              <div className="mode-button-group">
+                {MODE_OPTIONS.map((mode) => (
+                  <button
+                    key={mode.id}
+                    type="button"
+                    className={`neomorphus-button mode-button${
+                      selectedMode === mode.id ? " active" : ""
+                    }`}
+                    onClick={() => handleModeChange(mode.id)}
+                  >
+                    {mode.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {isNarrowLayout ? practiceDancePanel : null}
+
           <div className="app-shell-body">
             <div className="app-shell-columns">
-              <div className="app-shell-column app-shell-column--left">
-                {selectedStyle && (
-                  <div className="mode-row">
-                    <div className="mode-button-group">
-                      {MODE_OPTIONS.map((mode) => (
-                        <button
-                          key={mode.id}
-                          type="button"
-                          className={`neomorphus-button mode-button${
-                            selectedMode === mode.id ? " active" : ""
-                          }`}
-                          onClick={() => handleModeChange(mode.id)}
-                        >
-                          {mode.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {durationControls}
-
-                {selectedMode === "practice" && selectedStyle && (
-                  ENABLED_STYLE_IDS.has(selectedStyle) ? (
-                    <div style={{ marginTop: "1rem" }}>
-                      {practiceError && <p style={{ color: "#ff8080" }}>{practiceError}</p>}
-                      {practiceDancesLoading && !practiceError && <p>Loading dances...</p>}
-                      {practicePlaylist?.danceId?.toLowerCase() === "chacha" && null}
-
-                      {currentPracticeTrack && currentPracticeTrack.file && (
-                        <div style={{ marginTop: "1rem" }}>
-                          <audio
-                            ref={practiceAudioRef}
-                            src={currentPracticeTrack.file}
-                            preload="auto"
-                            style={{ display: "none" }}
-                            onPlay={() => setPracticeIsPlaying(true)}
-                            onPause={() => setPracticeIsPlaying(false)}
-                            onLoadedMetadata={handlePracticeLoadedMetadata}
-                            onTimeUpdate={handlePracticeTimeUpdate}
-                            onEnded={handlePracticeTrackCompletion}
-                          onError={(e) =>
-                            console.error(
-                              "Practice audio error:",
-                              e,
-                              "URL:",
-                              currentPracticeTrack.file
-                            )
-                          }
-                        />
-                          {showPracticeControls && null}
+              {!isNarrowLayout && (
+                <div className="app-shell-column app-shell-column--left">
+                  {selectedStyle && (
+                    <div className="mode-row mode-row--desktop">
+                      <div className="mode-button-group">
+                        {MODE_OPTIONS.map((mode) => (
+                          <button
+                            key={mode.id}
+                            type="button"
+                            className={`neomorphus-button mode-button${
+                              selectedMode === mode.id ? " active" : ""
+                            }`}
+                            onClick={() => handleModeChange(mode.id)}
+                          >
+                            {mode.label}
+                          </button>
+                        ))}
                       </div>
-                    )}
-                      {practicePlaylist && (!practicePlaylist.tracks?.length || !currentPracticeTrack) && (
-                        <p style={{ marginTop: "1rem" }}>
-                          No tracks available right now for {practicePlaylist.dance}.
-                        </p>
-                      )}
-                    </div>
-                  ) : (
-                    <p style={{ marginTop: "1rem" }}>
-                      Practice mode for {
-                        STYLE_OPTIONS.find((opt) => opt.id === selectedStyle)?.label ||
-                        selectedStyle
-                      } is not available yet.
-                    </p>
-                  )
-                )}
-
-                {selectedMode === "practice" &&
-                  selectedStyle &&
-                  ENABLED_STYLE_IDS.has(selectedStyle) && (
-                    <div className="practice-song-type-panel practice-song-type-panel--left">
-                      {practiceDanceContent}
                     </div>
                   )}
-              </div>
+
+                  {settingsBodyContent}
+                </div>
+              )}
 
               <div className="app-shell-column app-shell-column--right">
                 {selectedMode === "practice" && selectedStyle ? (
@@ -3425,6 +3674,83 @@ const roundTransportControls =
               </div>
             )}
           </div>
+
+          <button
+            type="button"
+            className="app-shell-settings"
+            aria-label="Settings"
+            aria-expanded={isSettingsOpen}
+            aria-controls="settings-modal"
+            ref={settingsButtonRef}
+            onClick={() => {
+              if (settingsOpenDraggedRef.current) {
+                settingsOpenDraggedRef.current = false;
+                return;
+              }
+              if (isSettingsOpen) {
+                setIsSettingsOpen(false);
+              } else {
+                prepareSettingsOpen();
+              }
+            }}
+            onPointerDown={handleSettingsOpenDragStart}
+            onPointerMove={handleSettingsOpenDragMove}
+            onPointerUp={handleSettingsOpenDragEnd}
+            onPointerCancel={handleSettingsOpenDragEnd}
+          >
+            {!isSettingsOpen && (
+              <span className="app-shell-settings-handle" aria-hidden="true">
+                <span />
+              </span>
+            )}
+            <span className="app-shell-settings-label">
+              Settings
+            </span>
+          </button>
+
+          {isNarrowLayout && (
+            <div className={`settings-modal${isSettingsOpen ? " is-open" : ""}`}>
+              <button
+                type="button"
+                className="settings-modal-backdrop"
+                onClick={() => setIsSettingsOpen(false)}
+                aria-hidden="true"
+                tabIndex={-1}
+              />
+              <div
+                className="settings-modal-panel"
+                role="dialog"
+                aria-modal="true"
+                aria-label="Settings"
+                id="settings-modal"
+                ref={settingsPanelRef}
+                onPointerDown={handleSettingsDragStart}
+                onPointerMove={handleSettingsDragMove}
+                onPointerUp={handleSettingsDragEnd}
+                onPointerCancel={handleSettingsDragEnd}
+                style={{
+                  "--settings-closed-offset":
+                    settingsClosedOffset !== null ? `${settingsClosedOffset}px` : undefined,
+                  ...(isSettingsOpen
+                    ? {
+                        transform: `translateY(${settingsDragOffset}px)`,
+                        transition: isSettingsDragging ? "none" : undefined,
+                      }
+                    : null),
+                }}
+              >
+                <div className="settings-modal-handle" aria-hidden="true">
+                  <span />
+                </div>
+                <div className="settings-modal-header">
+                  <span className="settings-modal-title">Settings</span>
+                </div>
+                <div className="settings-modal-content" ref={settingsModalContentRef}>
+                  {settingsBodyContent}
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="app-shell-footer">
             {selectedMode === "practice" ? practiceTransportControls : roundTransportControls}

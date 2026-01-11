@@ -261,7 +261,7 @@ function UploadSongDialog({
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
             style={{
-              border: `2px dashed ${isDragging ? "#25ed75" : "rgba(255, 255, 255, 0.25)"}`,
+              border: `2px dashed ${isDragging ? "#25ed27" : "rgba(255, 255, 255, 0.25)"}`,
               background: isDragging ? "rgba(37, 237, 117, 0.08)" : "rgba(10, 14, 18, 0.85)",
               borderRadius: "0.75rem",
               padding: "1.5rem",
@@ -387,7 +387,7 @@ function UploadSongDialog({
                 padding: "0.55rem 1.35rem",
                 borderRadius: "999px",
                 border: "none",
-                background: isSubmitting ? "rgba(37, 237, 117, 0.4)" : "#25ed75",
+                background: isSubmitting ? "rgba(37, 237, 117, 0.4)" : "#25ed27",
                 color: "#0f1014",
                 fontWeight: 600,
                 cursor: isSubmitting ? "default" : "pointer",

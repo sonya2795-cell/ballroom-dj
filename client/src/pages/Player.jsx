@@ -64,7 +64,7 @@ const SPEED_STEP_PERCENT = 1;
 const DEFAULT_SPEED_PERCENT = 100;
 const BACKGROUND_COLOR = "#30333a";
 const TEXT_COLOR = "#f2f4f7";
-const HIGHLIGHT_COLOR = "#25ed75";
+const HIGHLIGHT_COLOR = "#25ed27";
 
 function PlayIcon({ className, ...props }) {
   return (

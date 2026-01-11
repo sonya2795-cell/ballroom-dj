@@ -1057,7 +1057,7 @@ function AdminLibraryContent() {
             style={{
               padding: "0.45rem 0.9rem",
               borderRadius: "999px",
-              background: "#25ed75",
+              background: "#25ed27",
               border: "none",
               color: "#0f1014",
               fontWeight: 600,
