@@ -32,8 +32,21 @@ Google, Facebook, or Apple before starting a round.
 4. For local development, leave the defaults (`http://localhost:5173`) and run
    both client and server on the same machine.
 
-5. To forward in-app bug reports to your inbox, set the SMTP + recipient
-   values inside `server/.env`:
+5. To forward in-app bug reports to your inbox, set either the HTTPS email API
+   (recommended for production) or SMTP values inside `server/.env`:
+
+   Recommended (Resend API):
+
+   ```env
+   RESEND_API_KEY=your-resend-api-key
+   FEEDBACK_FROM=Ballroom DJ <feedback@ballroom-dj.app>
+   FEEDBACK_RECIPIENTS=you@example.com,qa@example.com
+   # Optional overrides
+   # FEEDBACK_MAX_ATTACHMENTS=3
+   # FEEDBACK_MAX_FILE_BYTES=8000000
+   ```
+
+   SMTP fallback:
 
    ```env
    SMTP_HOST=smtp.example.com
@@ -41,7 +54,7 @@ Google, Facebook, or Apple before starting a round.
    SMTP_USER=apikey
    SMTP_PASS=secret
    SMTP_SECURE=false
-   SMTP_FROM=Ballroom DJ <feedback@ballroom-dj.app>
+   FEEDBACK_FROM=Ballroom DJ <feedback@ballroom-dj.app>
    FEEDBACK_RECIPIENTS=you@example.com,qa@example.com
    # Optional overrides
    # FEEDBACK_MAX_ATTACHMENTS=3
