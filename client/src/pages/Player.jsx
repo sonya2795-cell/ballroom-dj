@@ -2575,7 +2575,7 @@ function Player() {
                     disabled={!selectedStyle || !ENABLED_STYLE_IDS.has(selectedStyle)}
                     className="neomorphus-button round-reload-button"
                   >
-                    Reload Round
+                    New Round
                   </button>
                   <button
                     type="button"

@@ -322,6 +322,13 @@ function PlayerApp() {
   const [isAuthMenuOpen, setIsAuthMenuOpen] = useState(false);
   const roundRepeatCount = ROUND_HEAT_REPEAT_MAP[roundHeatMode] ?? 1;
   const isPracticeMode = selectedMode === "practice";
+  const settingsLabel = isNarrowLayout
+    ? selectedMode === "practice"
+      ? "Practice Settings"
+      : selectedMode === "round"
+        ? "Round Settings"
+        : "Settings"
+    : "Settings";
   const isPracticeFullSongSelection =
     isPracticeMode && songDurationSeconds >= SONG_MAX_SECONDS;
   const minSongDurationMs = songDurationSeconds * 1000;
@@ -478,24 +485,46 @@ function PlayerApp() {
     }
   };
 
-  const prepareSettingsOpen = () => {
+  const updateSettingsOffsets = useCallback((includeClosedOffset = false) => {
     if (typeof window === "undefined") {
-      setIsSettingsOpen(true);
       return;
     }
     const button = settingsButtonRef.current;
     const panel = settingsPanelRef.current;
-    if (button && panel) {
-      const buttonRect = button.getBoundingClientRect();
+    if (!button) {
+      return;
+    }
+    const viewportHeight = window.visualViewport?.height || window.innerHeight;
+    const buttonRect = button.getBoundingClientRect();
+
+    if (includeClosedOffset && panel) {
       const panelRect = panel.getBoundingClientRect();
       const offset = Math.max(
-        buttonRect.top + panelRect.height - window.innerHeight,
+        buttonRect.top + panelRect.height - viewportHeight,
         0,
       );
       setSettingsClosedOffset(offset);
     }
+  }, []);
+
+  const prepareSettingsOpen = () => {
+    updateSettingsOffsets(true);
     setIsSettingsOpen(true);
   };
+
+  useEffect(() => {
+    if (!isNarrowLayout || !isSettingsOpen) {
+      return;
+    }
+    const handleResize = () => updateSettingsOffsets(false);
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    window.visualViewport?.addEventListener("resize", handleResize);
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      window.visualViewport?.removeEventListener("resize", handleResize);
+    };
+  }, [isNarrowLayout, isSettingsOpen, updateSettingsOffsets]);
 
   const handleSettingsOpenDragStart = (event) => {
     if (isSettingsOpen) {
@@ -3609,7 +3638,7 @@ const roundTransportControls =
                         }
                         className="neomorphus-button round-reload-button"
                       >
-                        Reload Round
+                        New Round
                       </button>
                     </div>
                   ) : (
@@ -3675,7 +3704,7 @@ const roundTransportControls =
                         disabled={!selectedStyle || !ENABLED_STYLE_IDS.has(selectedStyle)}
                         className="neomorphus-button round-reload-button"
                       >
-                        Reload Round
+                        New Round
                       </button>
                     </div>
                   )
@@ -3707,7 +3736,7 @@ const roundTransportControls =
           <button
             type="button"
             className="app-shell-settings"
-            aria-label="Settings"
+            aria-label={settingsLabel}
             aria-expanded={isSettingsOpen}
             aria-controls="settings-modal"
             ref={settingsButtonRef}
@@ -3733,7 +3762,7 @@ const roundTransportControls =
               </span>
             )}
             <span className="app-shell-settings-label">
-              Settings
+              {settingsLabel}
             </span>
           </button>
 
@@ -3750,7 +3779,7 @@ const roundTransportControls =
                 className="settings-modal-panel"
                 role="dialog"
                 aria-modal="true"
-                aria-label="Settings"
+                aria-label={settingsLabel}
                 id="settings-modal"
                 ref={settingsPanelRef}
                 onPointerDown={handleSettingsDragStart}
@@ -3772,7 +3801,7 @@ const roundTransportControls =
                   <span />
                 </div>
                 <div className="settings-modal-header">
-                  <span className="settings-modal-title">Settings</span>
+                  <span className="settings-modal-title">{settingsLabel}</span>
                 </div>
                 <div className="settings-modal-content" ref={settingsModalContentRef}>
                   {settingsBodyContent}
