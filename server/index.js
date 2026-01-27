@@ -219,6 +219,13 @@ function toNumberOrNull(value) {
   return Number.isFinite(num) ? num : null;
 }
 
+function sanitizeString(value, maxLength = 300) {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  return trimmed.length > maxLength ? trimmed.slice(0, maxLength) : trimmed;
+}
+
 function mapSongSnapshot(doc) {
   if (!doc.exists) return null;
   const data = doc.data() ?? {};
@@ -499,6 +506,27 @@ app.delete("/auth/session", async (req, res) => {
   }
 
   res.clearCookie(SESSION_COOKIE_NAME, baseCookieOptions);
+  res.status(204).end();
+});
+
+app.post("/api/auth/error", (req, res) => {
+  const payload = req.body || {};
+  const entry = {
+    timestamp: new Date().toISOString(),
+    provider: sanitizeString(payload.provider, 40),
+    errorCode: sanitizeString(payload.errorCode, 120),
+    errorName: sanitizeString(payload.errorName, 120),
+    errorMessage: sanitizeString(payload.errorMessage, 500),
+    location: sanitizeString(payload.location, 200),
+    path: sanitizeString(payload.path, 200),
+    userAgent: sanitizeString(payload.userAgent, 400),
+    cookieEnabled: typeof payload.cookieEnabled === "boolean" ? payload.cookieEnabled : null,
+    sessionStorageAvailable:
+      typeof payload.sessionStorageAvailable === "boolean"
+        ? payload.sessionStorageAvailable
+        : null,
+  };
+  console.warn("[auth-error]", entry);
   res.status(204).end();
 });
 

@@ -17,6 +17,45 @@ const PROVIDERS = {
   apple: () => new OAuthProvider("apple.com"),
 };
 
+function getSessionStorageAvailable() {
+  try {
+    if (typeof window === "undefined" || !window.sessionStorage) {
+      return false;
+    }
+    const key = "__auth_probe__";
+    window.sessionStorage.setItem(key, "1");
+    window.sessionStorage.removeItem(key);
+    return true;
+  } catch (err) {
+    return false;
+  }
+}
+
+async function reportAuthError({ error, providerKey }) {
+  try {
+    await fetchWithOrigin("/api/auth/error", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "include",
+      body: JSON.stringify({
+        provider: providerKey,
+        errorCode: error?.code ?? null,
+        errorName: error?.name ?? null,
+        errorMessage: error?.message ?? null,
+        location: typeof window !== "undefined" ? window.location?.hostname ?? null : null,
+        path: typeof window !== "undefined" ? window.location?.pathname ?? null : null,
+        userAgent: typeof navigator !== "undefined" ? navigator.userAgent ?? null : null,
+        cookieEnabled: typeof navigator !== "undefined" ? navigator.cookieEnabled ?? null : null,
+        sessionStorageAvailable: getSessionStorageAvailable(),
+      }),
+    });
+  } catch (err) {
+    // Telemetry is best-effort.
+  }
+}
+
 function mapUserResponse(user) {
   if (!user) return null;
   return {
@@ -105,6 +144,7 @@ export function AuthProvider({ children }) {
         await fetchSession();
       } catch (err) {
         console.error("Login failed", err);
+        reportAuthError({ error: err, providerKey });
         setAuthError(err instanceof Error ? err.message : "Login failed");
         setStatus("unauthenticated");
         throw err;
