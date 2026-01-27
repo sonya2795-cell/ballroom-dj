@@ -3,7 +3,9 @@ import { Routes, Route, useNavigate } from "react-router-dom";
 import AuthModal from "./components/AuthModal.jsx";
 import FeedbackModal from "./components/FeedbackModal.jsx";
 import { useAuth } from "./context/AuthContext.jsx";
+import AdminDashboard from "./pages/AdminDashboard.jsx";
 import AdminLibrary from "./pages/AdminLibrary.jsx";
+import AdminUsers from "./pages/AdminUsers.jsx";
 import { fetchWithOrigin } from "./utils/apiClient.js";
 import {
   getCrashOptions,
@@ -657,6 +659,11 @@ function PlayerApp() {
   const handleToggleAuthMenu = useCallback(() => {
     setIsAuthMenuOpen((prev) => !prev);
   }, []);
+
+  const handleOpenAdminDashboard = useCallback(() => {
+    setIsAuthMenuOpen(false);
+    navigate("/admin");
+  }, [navigate]);
 
   const handleOpenAdminLibrary = useCallback(() => {
     setIsAuthMenuOpen(false);
@@ -3544,9 +3551,9 @@ const roundTransportControls =
                     <button
                       type="button"
                       className="app-menu-item"
-                      onClick={handleOpenAdminLibrary}
+                      onClick={handleOpenAdminDashboard}
                     >
-                      Admin Library
+                      Admin Portal
                     </button>
                   ) : null}
                   <button
@@ -3881,7 +3888,9 @@ function App() {
   return (
     <Routes>
       <Route path="/" element={<PlayerApp />} />
+      <Route path="/admin" element={<AdminDashboard />} />
       <Route path="/admin/library" element={<AdminLibrary />} />
+      <Route path="/admin/users" element={<AdminUsers />} />
       <Route path="*" element={<PlayerApp />} />
     </Routes>
   );

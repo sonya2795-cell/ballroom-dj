@@ -219,6 +219,75 @@ function toNumberOrNull(value) {
   return Number.isFinite(num) ? num : null;
 }
 
+async function listAllUsersForStats() {
+  let totalUsers = 0;
+  let adminUsers = 0;
+  let usersWithEmail = 0;
+  let pageToken;
+
+  do {
+    const batch = await admin.auth().listUsers(1000, pageToken);
+    batch.users.forEach((userRecord) => {
+      totalUsers += 1;
+      if (userRecord.email) {
+        usersWithEmail += 1;
+      }
+      if (userRecord.customClaims?.role === "admin") {
+        adminUsers += 1;
+      }
+    });
+    pageToken = batch.pageToken;
+  } while (pageToken);
+
+  return { totalUsers, adminUsers, usersWithEmail };
+}
+
+async function buildLibraryStats() {
+  const [files] = await bucket.getFiles();
+  const mp3Files = files.filter((file) => file.name.toLowerCase().endsWith(".mp3"));
+  const styleCounts = {};
+  const styleDanceCounts = {};
+
+  mp3Files.forEach((file) => {
+    const pathSegments = file.name.split("/");
+    const baseFolder = pathSegments[0] ?? "";
+    const danceFolder = pathSegments[1] ?? "";
+    let styleId = null;
+    let danceLabel = null;
+
+    for (const [candidateStyleId, config] of Object.entries(STYLE_CONFIG)) {
+      if (config.baseFolder.toLowerCase() === baseFolder.toLowerCase()) {
+        styleId = candidateStyleId;
+        const danceMatch = config.dances.find(
+          (dance) => dance.folder.toLowerCase() === danceFolder.toLowerCase()
+        );
+        danceLabel = danceMatch?.label ?? null;
+        break;
+      }
+    }
+
+    const styleLabel = STYLE_LABELS[styleId] || "Unknown";
+    styleCounts[styleLabel] = (styleCounts[styleLabel] || 0) + 1;
+    if (!styleDanceCounts[styleLabel]) {
+      styleDanceCounts[styleLabel] = {};
+    }
+
+    const resolvedDanceLabel =
+      danceLabel ||
+      (danceFolder
+        ? danceFolder.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/_/g, " ")
+        : "Unknown");
+    styleDanceCounts[styleLabel][resolvedDanceLabel] =
+      (styleDanceCounts[styleLabel][resolvedDanceLabel] || 0) + 1;
+  });
+
+  return {
+    totalSongs: mp3Files.length,
+    styles: styleCounts,
+    styleDances: styleDanceCounts,
+  };
+}
+
 function sanitizeString(value, maxLength = 300) {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
@@ -348,6 +417,13 @@ const STYLE_CONFIG = {
   },
 };
 
+const STYLE_LABELS = {
+  ballroom: "Standard",
+  latin: "Latin",
+  rhythm: "Rhythm",
+  smooth: "Smooth",
+};
+
 function resolveStyleAndDance(styleKeyRaw, danceKeyRaw) {
   if (typeof styleKeyRaw !== "string" || typeof danceKeyRaw !== "string") {
     return null;
@@ -389,6 +465,8 @@ function formatUserRecord(userRecord) {
     displayName: userRecord.displayName,
     photoURL: userRecord.photoURL,
     emailVerified: userRecord.emailVerified,
+    creationTime: userRecord.metadata?.creationTime ?? null,
+    lastSignInTime: userRecord.metadata?.lastSignInTime ?? null,
     customClaims: userRecord.customClaims || {},
     providers: userRecord.providerData.map((provider) => provider.providerId),
   };
@@ -995,6 +1073,38 @@ app.post(
   },
 );
 
+app.get("/api/admin/stats", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const [userStats, libraryStats] = await Promise.all([
+      listAllUsersForStats(),
+      buildLibraryStats(),
+    ]);
+    res.json({
+      users: userStats,
+      library: libraryStats,
+    });
+  } catch (err) {
+    console.error("Failed to load admin stats", err);
+    res.status(500).json({ error: "Failed to load admin stats" });
+  }
+});
+
+app.get("/api/admin/users", requireAuth, requireAdmin, async (req, res) => {
+  const limit = Math.min(Math.max(Number(req.query?.limit) || 200, 1), 1000);
+  const pageToken = typeof req.query?.pageToken === "string" ? req.query.pageToken : undefined;
+
+  try {
+    const batch = await admin.auth().listUsers(limit, pageToken);
+    res.json({
+      users: batch.users.map(formatUserRecord),
+      nextPageToken: batch.pageToken || null,
+    });
+  } catch (err) {
+    console.error("Failed to load admin users", err);
+    res.status(500).json({ error: "Failed to load users" });
+  }
+});
+
 app.post("/api/admin/storage-upload", requireAuth, requireAdmin, async (req, res) => {
   try {
     const {
@@ -1137,8 +1247,6 @@ app.get("/api/admin/storage-files", requireAuth, requireAdmin, async (req, res) 
 
     const mp3Files = files.filter((file) => file.name.toLowerCase().endsWith(".mp3"));
 
-    console.log(`/api/admin/storage-files raw count ${files.length}, mp3 ${mp3Files.length}`);
-
     const data = mp3Files.map((file) => {
       const { metadata } = file;
       const customMetadata = metadata?.metadata ?? {};
@@ -1158,7 +1266,6 @@ app.get("/api/admin/storage-files", requireAuth, requireAdmin, async (req, res) 
       };
     });
 
-    console.log(`/api/admin/storage-files -> ${data.length} files`, data.slice(0, 5));
     res.set("Cache-Control", "no-store, no-cache, must-revalidate");
     res.set("Pragma", "no-cache");
     res.set("Expires", "0");

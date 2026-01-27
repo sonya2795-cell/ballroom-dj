@@ -1028,11 +1028,72 @@ function AdminLibraryContent() {
           borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
         }}
       >
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
-          <span style={{ fontSize: "1.5rem", fontWeight: 600 }}>Admin Library</span>
-          <span style={{ fontSize: "0.9rem", color: "rgba(242, 244, 247, 0.7)" }}>
-            Signed in as {displayName}
-          </span>
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+            <span style={{ fontSize: "1.5rem", fontWeight: 600 }}>Music Library</span>
+            <span style={{ fontSize: "0.9rem", color: "rgba(242, 244, 247, 0.7)" }}>
+              Signed in as {displayName}
+            </span>
+          </div>
+          <nav
+            style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}
+            aria-label="Admin sections"
+          >
+            <Link
+              to="/admin"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "0.5rem 1rem",
+                borderRadius: "999px",
+                border: "1px solid rgba(255, 255, 255, 0.22)",
+                color: "inherit",
+                textDecoration: "none",
+                fontWeight: 600,
+                letterSpacing: "0.02em",
+                background: "transparent",
+              }}
+            >
+              Dashboard
+            </Link>
+            <Link
+              to="/admin/library"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "0.5rem 1rem",
+                borderRadius: "999px",
+                border: "1px solid rgba(37, 237, 39, 0.6)",
+                color: "#d5ffd6",
+                textDecoration: "none",
+                fontWeight: 600,
+                letterSpacing: "0.02em",
+                background: "rgba(37, 237, 39, 0.18)",
+              }}
+            >
+              Music
+            </Link>
+            <Link
+              to="/admin/users"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "0.5rem 1rem",
+                borderRadius: "999px",
+                border: "1px solid rgba(255, 255, 255, 0.22)",
+                color: "inherit",
+                textDecoration: "none",
+                fontWeight: 600,
+                letterSpacing: "0.02em",
+                background: "transparent",
+              }}
+            >
+              Users
+            </Link>
+          </nav>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
           <button
