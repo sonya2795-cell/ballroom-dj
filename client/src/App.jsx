@@ -282,6 +282,8 @@ function PlayerApp() {
   const settingsModalContentRef = useRef(null);
   const settingsButtonRef = useRef(null);
   const settingsPanelRef = useRef(null);
+  const settingsOnboardingHandledRef = useRef(false);
+  const settingsOnboardingSessionRef = useRef(false);
   const [settingsClosedOffset, setSettingsClosedOffset] = useState(null);
   const settingsOpenDragStartYRef = useRef(0);
   const settingsOpenPointerIdRef = useRef(null);
@@ -2227,6 +2229,40 @@ function PlayerApp() {
     }
   }, [selectedStyle, selectedMode, showWelcomeModal]);
 
+  useEffect(() => {
+    if (!showWelcomeModal && !showModeModal && selectedStyle && selectedMode !== null) {
+      if (settingsOnboardingSessionRef.current) {
+        return;
+      }
+      settingsOnboardingSessionRef.current = true;
+      settingsOnboardingHandledRef.current = false;
+    }
+  }, [selectedMode, selectedStyle, showModeModal, showWelcomeModal]);
+
+  useEffect(() => {
+    if (settingsOnboardingHandledRef.current) {
+      return;
+    }
+    if (!selectedStyle || selectedMode === null) {
+      return;
+    }
+    if (showWelcomeModal || showModeModal) {
+      return;
+    }
+    if (!isNarrowLayout || isSettingsOpen) {
+      return;
+    }
+    setIsSettingsOpen(true);
+    settingsOnboardingHandledRef.current = true;
+  }, [
+    isNarrowLayout,
+    isSettingsOpen,
+    selectedMode,
+    selectedStyle,
+    showModeModal,
+    showWelcomeModal,
+  ]);
+
   const handlePracticeTrackCompletion = useCallback(() => {
     if (practiceAdvancingRef.current) {
       console.debug("[practice] track completion suppressed", {
@@ -3319,17 +3355,19 @@ const roundTransportControls =
 
   const settingsBodyContent = (
     <>
+      {!isNarrowLayout ? practiceDancePanel : null}
+
       {durationControls}
 
       {selectedMode === "practice" && selectedStyle && (
         ENABLED_STYLE_IDS.has(selectedStyle) ? (
-          <div style={{ marginTop: "1rem" }}>
+          <div>
             {practiceError && <p style={{ color: "#ff8080" }}>{practiceError}</p>}
             {practiceDancesLoading && !practiceError && <p>Loading dances...</p>}
             {practicePlaylist?.danceId?.toLowerCase() === "chacha" && null}
 
             {currentPracticeTrack && currentPracticeTrack.file && (
-              <div style={{ marginTop: "1rem" }}>
+              <div>
                 <audio
                   ref={practiceAudioRef}
                   src={currentPracticeTrack.file}
@@ -3353,13 +3391,13 @@ const roundTransportControls =
               </div>
             )}
             {practicePlaylist && (!practicePlaylist.tracks?.length || !currentPracticeTrack) && (
-              <p style={{ marginTop: "1rem" }}>
+              <p>
                 No tracks available right now for {practicePlaylist.dance}.
               </p>
             )}
           </div>
         ) : (
-          <p style={{ marginTop: "1rem" }}>
+          <p>
             Practice mode for {
               STYLE_OPTIONS.find((opt) => opt.id === selectedStyle)?.label ||
               selectedStyle
@@ -3368,7 +3406,6 @@ const roundTransportControls =
         )
       )}
 
-      {!isNarrowLayout ? practiceDancePanel : null}
     </>
   );
 
