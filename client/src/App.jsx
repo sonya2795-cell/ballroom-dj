@@ -612,6 +612,14 @@ function PlayerApp() {
   );
   const hasPasoCrashMetadata = pasoCrashOptions.length > 0;
   const allowCrashSelection = isPasoPracticeContext || isLatinRoundMode;
+  const isPracticeCrashFilterActive =
+    selectedMode === "practice" && isPasoPracticeContext && selectedCrash != null;
+  const practiceQueueTracks = useMemo(() => {
+    const tracks = practicePlaylist?.tracks ?? [];
+    if (!tracks.length) return [];
+    if (!isPracticeCrashFilterActive) return tracks;
+    return tracks.filter((track) => getCrashSeconds(track, selectedCrash) != null);
+  }, [practicePlaylist, isPracticeCrashFilterActive, selectedCrash]);
   const getActiveCrashSeconds = useCallback(
     (song) => getCrashSeconds(song, selectedCrash),
     [selectedCrash],
@@ -2502,10 +2510,20 @@ function PlayerApp() {
   );
 
   const showPracticeControls = Boolean(currentPracticeTrack);
-  const practiceEffectiveDuration =
+  const practiceCrashDurationSeconds = useMemo(() => {
+    if (!isPracticeCrashFilterActive || !currentPracticeTrack) return null;
+    return getActiveCrashDurationFromClip(currentPracticeTrack);
+  }, [isPracticeCrashFilterActive, currentPracticeTrack, getActiveCrashDurationFromClip]);
+  let practiceEffectiveDuration =
     practiceDuration && Number.isFinite(practiceDuration) && practiceDuration > 0
       ? practiceDuration
       : 0;
+  if (practiceCrashDurationSeconds != null) {
+    practiceEffectiveDuration =
+      practiceEffectiveDuration > 0
+        ? Math.min(practiceEffectiveDuration, practiceCrashDurationSeconds)
+        : practiceCrashDurationSeconds;
+  }
   const practiceEffectiveCurrentTime = Math.min(
     practiceCurrentTime,
     practiceEffectiveDuration || 0,
@@ -2600,16 +2618,17 @@ function PlayerApp() {
         {practiceDanceContent}
       </div>
     ) : null;
+  const practiceQueueHasTracks = practicePlaylist?.tracks?.length ?? 0;
   const practiceQueueContent =
-    practicePlaylist?.tracks?.length
+    practiceQueueTracks.length
       ? (
           <ul className="round-queue-list">
-            {practicePlaylist.tracks.map((track, idx) => {
+            {practiceQueueTracks.map((track, idx) => {
               const badge = getRoundDanceBadgeInfo(
                 track,
                 practicePlaylist?.danceId || practicePlaylist?.dance
               );
-              const isActive = idx === practiceTrackIndex;
+              const isActive = track === currentPracticeTrack;
               return (
                 <li
                   key={track.id ?? track.file ?? idx}
@@ -2640,7 +2659,9 @@ function PlayerApp() {
         )
       : (
           <p className="practice-queue-empty">
-            No practice tracks loaded yet.
+            {practiceQueueHasTracks && isPracticeCrashFilterActive
+              ? "No practice tracks match the selected crash."
+              : "No practice tracks loaded yet."}
           </p>
         );
   const pasoPracticeCrashButtonsMarkup =

@@ -930,6 +930,12 @@ textarea {
     border-top: none;
   }
 
+  .feedback-modal {
+    width: calc(100% - 2rem);
+    max-width: calc(100% - 2rem);
+    box-sizing: border-box;
+  }
+
   .practice-dance-button-row--first {
     grid-template-columns: repeat(5, minmax(0, 1fr));
   }
