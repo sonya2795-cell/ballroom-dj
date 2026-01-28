@@ -133,6 +133,12 @@ export default function AdminDashboard() {
   const userStats = useMemo(() => stats?.users ?? {}, [stats]);
   const libraryStats = useMemo(() => stats?.library ?? {}, [stats]);
   const styleOrder = ["Latin", "Standard", "Smooth", "Rhythm"];
+  const danceOrderByStyle = {
+    Latin: ["Cha Cha", "Samba", "Rumba", "Paso Doble", "Jive"],
+    Standard: ["Waltz", "Tango", "Viennese Waltz", "Foxtrot", "Quickstep"],
+    Smooth: ["Waltz", "Tango", "Foxtrot", "Viennese Waltz"],
+    Rhythm: ["Cha Cha", "Rumba", "Swing", "Bolero", "Mambo"],
+  };
   const styleCounts = useMemo(() => {
     const styles = libraryStats.styles ?? {};
     const ordered = styleOrder.map((label) => [label, styles[label] ?? 0]);
@@ -237,9 +243,15 @@ export default function AdminDashboard() {
                 <div style={{ marginTop: "1.5rem", display: "grid", gap: "1rem" }}>
                   {styleCounts.map(([styleLabel]) => {
                     const danceMap = styleDanceCounts[styleLabel] || {};
-                    const dances = Object.entries(danceMap).sort(
-                      (a, b) => Number(b[1] || 0) - Number(a[1] || 0)
-                    );
+                    const order = danceOrderByStyle[styleLabel] || [];
+                    const dances = Object.entries(danceMap).sort((a, b) => {
+                      const aIndex = order.indexOf(a[0]);
+                      const bIndex = order.indexOf(b[0]);
+                      const aPos = aIndex === -1 ? Number.POSITIVE_INFINITY : aIndex;
+                      const bPos = bIndex === -1 ? Number.POSITIVE_INFINITY : bIndex;
+                      if (aPos !== bPos) return aPos - bPos;
+                      return a[0].localeCompare(b[0]);
+                    });
                     return (
                       <div
                         key={styleLabel}

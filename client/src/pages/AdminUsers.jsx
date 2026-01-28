@@ -105,6 +105,18 @@ const selectStyle = {
   color: "inherit",
 };
 
+const sortButtonStyle = {
+  background: "transparent",
+  border: "none",
+  color: "inherit",
+  font: "inherit",
+  padding: 0,
+  cursor: "pointer",
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "0.35rem",
+};
+
 function splitName(displayName) {
   if (!displayName) {
     return { firstName: "--", lastName: "--" };
@@ -115,6 +127,21 @@ function splitName(displayName) {
   return { firstName, lastName };
 }
 
+function formatDateTime(value) {
+  if (!value) return "--";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "--";
+  return new Intl.DateTimeFormat("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZoneName: "short",
+  }).format(parsed);
+}
+
 export default function AdminUsers() {
   const { user, isAdmin, logout } = useAuth();
   const [users, setUsers] = useState([]);
@@ -123,6 +150,8 @@ export default function AdminUsers() {
   const [error, setError] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
+  const [sortKey, setSortKey] = useState("lastSignInTime");
+  const [sortDirection, setSortDirection] = useState("desc");
 
   const loadUsers = useCallback(
     async (options = {}) => {
@@ -174,6 +203,73 @@ export default function AdminUsers() {
       return haystack.includes(query);
     });
   }, [roleFilter, searchQuery, users]);
+
+  const sortedUsers = useMemo(() => {
+    const normalize = (value) => {
+      if (value === null || typeof value === "undefined") return "";
+      return String(value).toLowerCase();
+    };
+
+    const getFieldValue = (entry, key) => {
+      switch (key) {
+        case "firstName":
+          return splitName(entry.displayName).firstName;
+        case "lastName":
+          return splitName(entry.displayName).lastName;
+        case "email":
+          return entry.email || "";
+        case "providers":
+          return Array.isArray(entry.providers) ? entry.providers.join(", ") : "";
+        case "role":
+          return entry.customClaims?.role || "user";
+        case "created":
+          return entry.creationTime || "";
+        case "lastSignIn":
+          return entry.lastSignInTime || "";
+        default:
+          return "";
+      }
+    };
+
+    const compare = (a, b) => {
+      const aValue = getFieldValue(a, sortKey);
+      const bValue = getFieldValue(b, sortKey);
+      if (sortKey === "created" || sortKey === "lastSignIn") {
+        const aTime = aValue ? Date.parse(aValue) : 0;
+        const bTime = bValue ? Date.parse(bValue) : 0;
+        return aTime - bTime;
+      }
+      return normalize(aValue).localeCompare(normalize(bValue));
+    };
+
+    const sorted = [...filteredUsers].sort(compare);
+    return sortDirection === "asc" ? sorted : sorted.reverse();
+  }, [filteredUsers, sortDirection, sortKey]);
+
+  const handleSort = useCallback(
+    (key) => {
+      setSortKey((prevKey) => {
+        if (prevKey === key) {
+          setSortDirection((prevDir) => (prevDir === "asc" ? "desc" : "asc"));
+          return prevKey;
+        }
+        setSortDirection(key === "created" || key === "lastSignIn" ? "desc" : "asc");
+        return key;
+      });
+    },
+    []
+  );
+
+  const renderSortLabel = (key, label) => {
+    const isActive = sortKey === key;
+    const arrow = isActive ? (sortDirection === "asc" ? "▲" : "▼") : "";
+    return (
+      <button type="button" onClick={() => handleSort(key)} style={sortButtonStyle}>
+        <span>{label}</span>
+        <span aria-hidden="true">{arrow}</span>
+      </button>
+    );
+  };
 
   return (
     <div style={containerStyle}>
@@ -286,17 +382,17 @@ export default function AdminUsers() {
                 <table style={tableStyle}>
                   <thead>
                     <tr>
-                      <th style={cellStyle}>First name</th>
-                      <th style={cellStyle}>Last name</th>
-                      <th style={cellStyle}>Email</th>
-                      <th style={cellStyle}>Providers</th>
-                      <th style={cellStyle}>Role</th>
-                      <th style={cellStyle}>Created</th>
-                      <th style={cellStyle}>Last sign-in</th>
+                      <th style={cellStyle}>{renderSortLabel("firstName", "First name")}</th>
+                      <th style={cellStyle}>{renderSortLabel("lastName", "Last name")}</th>
+                      <th style={cellStyle}>{renderSortLabel("email", "Email")}</th>
+                      <th style={cellStyle}>{renderSortLabel("providers", "Providers")}</th>
+                      <th style={cellStyle}>{renderSortLabel("role", "Role")}</th>
+                      <th style={cellStyle}>{renderSortLabel("created", "Created")}</th>
+                      <th style={cellStyle}>{renderSortLabel("lastSignIn", "Last sign-in")}</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredUsers.map((entry) => {
+                    {sortedUsers.map((entry) => {
                       const { firstName, lastName } = splitName(entry.displayName);
                       return (
                         <tr key={entry.uid}>
@@ -313,8 +409,8 @@ export default function AdminUsers() {
                               : "--"}
                           </td>
                           <td style={cellStyle}>{entry.customClaims?.role || "user"}</td>
-                          <td style={cellStyle}>{entry.creationTime || "--"}</td>
-                          <td style={cellStyle}>{entry.lastSignInTime || "--"}</td>
+                          <td style={cellStyle}>{formatDateTime(entry.creationTime)}</td>
+                          <td style={cellStyle}>{formatDateTime(entry.lastSignInTime)}</td>
                         </tr>
                       );
                     })}
