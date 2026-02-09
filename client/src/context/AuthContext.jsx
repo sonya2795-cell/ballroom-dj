@@ -3,8 +3,11 @@ import {
   FacebookAuthProvider,
   GoogleAuthProvider,
   OAuthProvider,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
   signInWithPopup,
   signOut,
+  updateProfile,
 } from "firebase/auth";
 import { auth } from "../firebase";
 import { fetchWithOrigin } from "../utils/apiClient.js";
@@ -110,6 +113,29 @@ export function AuthProvider({ children }) {
     fetchSession();
   }, [fetchSession]);
 
+  const establishSessionFromUser = useCallback(
+    async (firebaseUser) => {
+      const idToken = await firebaseUser.getIdToken();
+      const response = await fetchWithOrigin("/auth/session", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({ idToken }),
+      });
+
+      if (!response.ok) {
+        const message = await response.text();
+        throw new Error(message || "Failed to establish session");
+      }
+
+      await signOut(auth);
+      await fetchSession();
+    },
+    [fetchSession]
+  );
+
   const login = useCallback(
     async (providerKey) => {
       const providerFactory = PROVIDERS[providerKey];
@@ -124,24 +150,7 @@ export function AuthProvider({ children }) {
       try {
         const provider = providerFactory();
         const credential = await signInWithPopup(auth, provider);
-        const idToken = await credential.user.getIdToken();
-
-        const response = await fetchWithOrigin("/auth/session", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          credentials: "include",
-          body: JSON.stringify({ idToken }),
-        });
-
-        if (!response.ok) {
-          const message = await response.text();
-          throw new Error(message || "Failed to establish session");
-        }
-
-        await signOut(auth);
-        await fetchSession();
+        await establishSessionFromUser(credential.user);
       } catch (err) {
         console.error("Login failed", err);
         reportAuthError({ error: err, providerKey });
@@ -152,7 +161,51 @@ export function AuthProvider({ children }) {
         setIsProcessingLogin(false);
       }
     },
-    [fetchSession, clearAuthError]
+    [clearAuthError, establishSessionFromUser]
+  );
+
+  const loginWithEmail = useCallback(
+    async ({ email, password }) => {
+      setIsProcessingLogin(true);
+      clearAuthError();
+
+      try {
+        const credential = await signInWithEmailAndPassword(auth, email, password);
+        await establishSessionFromUser(credential.user);
+      } catch (err) {
+        console.error("Email login failed", err);
+        setAuthError(err instanceof Error ? err.message : "Login failed");
+        setStatus("unauthenticated");
+        throw err;
+      } finally {
+        setIsProcessingLogin(false);
+      }
+    },
+    [clearAuthError, establishSessionFromUser]
+  );
+
+  const registerWithEmail = useCallback(
+    async ({ firstName, lastName, email, password }) => {
+      setIsProcessingLogin(true);
+      clearAuthError();
+
+      try {
+        const credential = await createUserWithEmailAndPassword(auth, email, password);
+        const displayName = [firstName, lastName].filter(Boolean).join(" ").trim();
+        if (displayName) {
+          await updateProfile(credential.user, { displayName });
+        }
+        await establishSessionFromUser(credential.user);
+      } catch (err) {
+        console.error("Email signup failed", err);
+        setAuthError(err instanceof Error ? err.message : "Sign up failed");
+        setStatus("unauthenticated");
+        throw err;
+      } finally {
+        setIsProcessingLogin(false);
+      }
+    },
+    [clearAuthError, establishSessionFromUser]
   );
 
   const logout = useCallback(async () => {
@@ -185,6 +238,8 @@ export function AuthProvider({ children }) {
       user,
       authError,
       login,
+      loginWithEmail,
+      registerWithEmail,
       logout,
       refreshSession: fetchSession,
       isProcessingLogin,
@@ -195,6 +250,8 @@ export function AuthProvider({ children }) {
       user,
       authError,
       login,
+      loginWithEmail,
+      registerWithEmail,
       logout,
       fetchSession,
       isProcessingLogin,

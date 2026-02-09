@@ -265,6 +265,8 @@ function Player() {
   const {
     isAuthenticated,
     login,
+    loginWithEmail,
+    registerWithEmail,
     authError,
     clearAuthError,
     isProcessingLogin,
@@ -909,6 +911,22 @@ function Player() {
   const handleProviderLogin = async (providerKey) => {
     try {
       await login(providerKey);
+    } catch {
+      // Error is surfaced through auth context; suppress to avoid console noise
+    }
+  };
+
+  const handleEmailLogin = async (payload) => {
+    try {
+      await loginWithEmail(payload);
+    } catch {
+      // Error is surfaced through auth context; suppress to avoid console noise
+    }
+  };
+
+  const handleEmailSignup = async (payload) => {
+    try {
+      await registerWithEmail(payload);
     } catch {
       // Error is surfaced through auth context; suppress to avoid console noise
     }
@@ -2205,6 +2223,8 @@ function Player() {
           clearAuthError();
         }}
         onSelectProvider={handleProviderLogin}
+        onEmailLogin={handleEmailLogin}
+        onEmailSignup={handleEmailSignup}
         isProcessing={isProcessingLogin}
         error={authError}
         onRetry={() => clearAuthError()}
