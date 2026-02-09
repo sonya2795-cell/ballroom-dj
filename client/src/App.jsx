@@ -624,6 +624,23 @@ function PlayerApp() {
     if (!isPracticeCrashFilterActive) return tracks;
     return tracks.filter((track) => getCrashSeconds(track, selectedCrash) != null);
   }, [practicePlaylist, isPracticeCrashFilterActive, selectedCrash]);
+  const activePlaybackSpeedPercent = isPracticeMode
+    ? practicePlaybackSpeedPercent
+    : roundPlaybackSpeedPercent;
+  const handlePlaybackSpeedChange = useCallback(
+    (nextValue) => {
+      if (!Number.isFinite(nextValue)) {
+        return;
+      }
+      const clamped = Math.min(Math.max(nextValue, SPEED_MIN_PERCENT), SPEED_MAX_PERCENT);
+      if (isPracticeMode) {
+        setPracticePlaybackSpeedPercent(clamped);
+      } else {
+        setRoundPlaybackSpeedPercent(clamped);
+      }
+    },
+    [isPracticeMode, setPracticePlaybackSpeedPercent, setRoundPlaybackSpeedPercent],
+  );
   const getActiveCrashSeconds = useCallback(
     (song) => getCrashSeconds(song, selectedCrash),
     [selectedCrash],
@@ -655,6 +672,20 @@ function PlayerApp() {
 
   // Prevent duplicate advancing
   const advancingRef = useRef(false);
+  const applyPlaybackRate = useCallback((audio, rate) => {
+    if (!audio) return;
+    audio.defaultPlaybackRate = rate;
+    audio.playbackRate = rate;
+    if ("preservesPitch" in audio) {
+      audio.preservesPitch = true;
+    }
+    if ("mozPreservesPitch" in audio) {
+      audio.mozPreservesPitch = true;
+    }
+    if ("webkitPreservesPitch" in audio) {
+      audio.webkitPreservesPitch = true;
+    }
+  }, []);
 
   const handleToggleAuthMenu = useCallback(() => {
     setIsAuthMenuOpen((prev) => !prev);
@@ -1104,7 +1135,7 @@ function PlayerApp() {
     clearFadeTimers({ resetVolume: true });
     if (audioRef.current) {
       audioRef.current.volume = 1.0;
-      audioRef.current.playbackRate = roundPlaybackRate;
+      applyPlaybackRate(audioRef.current, roundPlaybackRate);
     }
     resetBreakState();
     setIsPlaying(true);
@@ -1122,7 +1153,7 @@ function PlayerApp() {
   };
 
   const handleLoadedMetadata = (event) => {
-    event.target.playbackRate = roundPlaybackRate;
+    applyPlaybackRate(event.target, roundPlaybackRate);
     setDuration(event.target.duration || 0);
     setCurrentTime(event.target.currentTime || 0);
   };
@@ -2199,7 +2230,7 @@ function PlayerApp() {
       audio.currentTime = clipStartSeconds;
     }
 
-    audio.playbackRate = practicePlaybackRate;
+    applyPlaybackRate(audio, practicePlaybackRate);
     audio
       .play()
       .catch((err) => {
@@ -2208,7 +2239,13 @@ function PlayerApp() {
       });
     setPracticeCurrentTime(0);
     setPracticeDuration(0);
-  }, [practicePlaylist, practiceTrackIndex, currentPracticeTrack, practicePlaybackRate]);
+  }, [
+    applyPlaybackRate,
+    currentPracticeTrack,
+    practicePlaybackRate,
+    practicePlaylist,
+    practiceTrackIndex,
+  ]);
 
   useEffect(() => {
     if (!practicePlaylist?.tracks) return;
@@ -2372,7 +2409,7 @@ function PlayerApp() {
 
   const handlePracticeLoadedMetadata = (event) => {
     const audio = event.target;
-    audio.playbackRate = practicePlaybackRate;
+    applyPlaybackRate(audio, practicePlaybackRate);
     const track = currentPracticeTrack;
     if (!track) {
       setPracticeDuration(audio.duration || 0);
@@ -2461,7 +2498,7 @@ function PlayerApp() {
     if (!audio) return;
 
     if (audio.paused) {
-      audio.playbackRate = practicePlaybackRate;
+      applyPlaybackRate(audio, practicePlaybackRate);
       audio
         .play()
         .catch((err) => console.error("Practice play error:", err));
@@ -2510,16 +2547,17 @@ function PlayerApp() {
   useEffect(() => {
     const roundAudio = audioRef.current;
     if (roundAudio) {
-      roundAudio.playbackRate = roundPlaybackRate;
+      applyPlaybackRate(roundAudio, roundPlaybackRate);
     }
-  }, [roundPlaybackRate]);
+  }, [applyPlaybackRate, roundPlaybackRate]);
 
   useEffect(() => {
     const practiceAudio = practiceAudioRef.current;
     if (practiceAudio) {
-      practiceAudio.playbackRate = practicePlaybackRate;
+      applyPlaybackRate(practiceAudio, practicePlaybackRate);
     }
-  }, [practicePlaybackRate]);
+  }, [applyPlaybackRate, practicePlaybackRate]);
+
 
   useEffect(() => {
     // Reset playback indicators whenever we load a new track
@@ -2956,7 +2994,7 @@ function PlayerApp() {
           <div>
             <div className="slider-label-row">
               <label htmlFor="round-playback-speed-slider">Speed</label>
-              <span className="slider-value">{roundPlaybackSpeedPercent}%</span>
+              <span className="slider-value">{activePlaybackSpeedPercent}%</span>
             </div>
             <input
               id="round-playback-speed-slider"
@@ -2964,16 +3002,10 @@ function PlayerApp() {
               min={SPEED_MIN_PERCENT}
               max={SPEED_MAX_PERCENT}
               step={SPEED_STEP_PERCENT}
-              value={roundPlaybackSpeedPercent}
+              value={activePlaybackSpeedPercent}
               className="neomorphus-slider"
               onChange={(e) => {
-                const nextValue = Number(e.target.value);
-                if (!Number.isFinite(nextValue)) {
-                  return;
-                }
-                setRoundPlaybackSpeedPercent(
-                  Math.min(Math.max(nextValue, SPEED_MIN_PERCENT), SPEED_MAX_PERCENT),
-                );
+                handlePlaybackSpeedChange(Number(e.target.value));
               }}
             />
           </div>
@@ -3380,7 +3412,10 @@ const roundTransportControls =
                   src={currentPracticeTrack.file}
                   preload="auto"
                   style={{ display: "none" }}
-                  onPlay={() => setPracticeIsPlaying(true)}
+                  onPlay={() => {
+                    applyPlaybackRate(practiceAudioRef.current, practicePlaybackRate);
+                    setPracticeIsPlaying(true);
+                  }}
                   onPause={() => setPracticeIsPlaying(false)}
                   onLoadedMetadata={handlePracticeLoadedMetadata}
                   onTimeUpdate={handlePracticeTimeUpdate}
