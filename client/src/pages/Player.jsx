@@ -264,6 +264,7 @@ function buildExpandedRound(songs, repeatCount) {
 function Player() {
   const {
     isAuthenticated,
+    isUnauthenticated,
     login,
     loginWithEmail,
     registerWithEmail,
@@ -2752,11 +2753,11 @@ function Player() {
           ) : null}
         </div>
       </div>
-      {!isAuthenticated ? (
+      {isUnauthenticated ? (
         <div className="preview-banner">
           <div className="preview-banner-content">
             <div>
-              <div className="preview-banner-title">Preview of Muzon</div>
+              <div className="preview-banner-title">Preview of Muzon App</div>
               <div className="preview-banner-subtitle">
                 Sign up to unlock full rounds and practice features.
               </div>

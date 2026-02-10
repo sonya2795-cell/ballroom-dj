@@ -442,6 +442,7 @@ textarea {
   padding: 0.35rem 0.95rem;
   font-size: 0.85rem;
   letter-spacing: 0.02em;
+  border-radius: 9999px;
 }
 
 .neomorphus-button.round-control {
@@ -1568,6 +1569,23 @@ textarea {
   justify-content: center;
   font-size: 0.95rem;
   font-weight: 400;
+  border-radius: 9999px;
+}
+
+.auth-prompt-actions .neomorphus-button {
+  border-radius: 9999px;
+}
+
+.auth-prompt-actions .neomorphus-button:not(.secondary) {
+  background: #25ed27;
+  color: #17331a;
+  box-shadow: 3px 3px 5px rgba(11, 19, 12, 0.45), -3px -3px 5px rgba(77, 92, 80, 0.4);
+}
+
+.auth-prompt-actions .neomorphus-button.secondary {
+  background: #ffffff;
+  color: #30333a;
+  box-shadow: 3px 3px 5px rgba(11, 13, 15, 0.35), -3px -3px 5px rgba(93, 99, 110, 0.4);
 }
 
 .auth-local-error {
@@ -2329,6 +2347,7 @@ textarea {
   padding: 0.5rem 0.9rem;
   font-size: 0.95rem;
   font-weight: 600;
+  border-radius: 9999px;
 }
 
 .app-menu-icon {
