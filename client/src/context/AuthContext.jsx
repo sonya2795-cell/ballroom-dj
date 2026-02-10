@@ -4,6 +4,7 @@ import {
   GoogleAuthProvider,
   OAuthProvider,
   createUserWithEmailAndPassword,
+  fetchSignInMethodsForEmail,
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut,
@@ -70,6 +71,62 @@ function mapUserResponse(user) {
     providers: Array.isArray(user.providers) ? user.providers : [],
     customClaims: user.customClaims ?? {},
   };
+}
+
+function getFriendlyAuthError(error, fallbackMessage) {
+  const code = typeof error?.code === "string" ? error.code : "";
+
+  switch (code) {
+    case "auth/invalid-credential":
+    case "auth/invalid-email":
+    case "auth/user-not-found":
+    case "auth/wrong-password":
+      return "Incorrect email or password. Please try again.";
+    case "auth/too-many-requests":
+      return "Too many attempts. Please wait a moment and try again.";
+    case "auth/user-disabled":
+      return "This account has been disabled. Contact support for help.";
+    case "auth/email-already-in-use":
+      return "That email is already associated with an existing account. Please proceed to login with this email.";
+    case "auth/weak-password":
+      return "Password is too weak. Please use at least 6 characters.";
+    case "auth/operation-not-allowed":
+      return "Email/password sign-in is not enabled yet. Contact support.";
+    default:
+      return fallbackMessage;
+  }
+}
+
+function getProviderLabelForMethod(method) {
+  switch (method) {
+    case "google.com":
+      return "Gmail";
+    case "facebook.com":
+      return "Facebook";
+    case "apple.com":
+      return "Apple";
+    case "github.com":
+      return "GitHub";
+    case "twitter.com":
+      return "Twitter";
+    case "password":
+      return "email/password";
+    default:
+      return null;
+  }
+}
+
+function getGmailHeuristic(email) {
+  if (typeof email !== "string") return null;
+  const domain = email.trim().toLowerCase().split("@")[1] || "";
+  if (domain === "gmail.com" || domain === "googlemail.com") {
+    return "Gmail";
+  }
+  return null;
+}
+
+function buildExistingAccountMessage(labels) {
+  return "That email is already associated with an existing account. Please proceed to login with this email.";
 }
 
 export function AuthProvider({ children }) {
@@ -154,7 +211,7 @@ export function AuthProvider({ children }) {
       } catch (err) {
         console.error("Login failed", err);
         reportAuthError({ error: err, providerKey });
-        setAuthError(err instanceof Error ? err.message : "Login failed");
+        setAuthError(getFriendlyAuthError(err, "Login failed"));
         setStatus("unauthenticated");
         throw err;
       } finally {
@@ -170,11 +227,51 @@ export function AuthProvider({ children }) {
       clearAuthError();
 
       try {
+        try {
+          const methods = await fetchSignInMethodsForEmail(auth, email);
+          if (methods.includes("google.com") && !methods.includes("password")) {
+            setAuthError(
+              "That email is already associated with an existing account. Please continue with Google."
+            );
+            setStatus("unauthenticated");
+            return;
+          }
+        } catch (lookupError) {
+          // Ignore precheck errors and fall through to Firebase.
+        }
+
         const credential = await signInWithEmailAndPassword(auth, email, password);
         await establishSessionFromUser(credential.user);
       } catch (err) {
         console.error("Email login failed", err);
-        setAuthError(err instanceof Error ? err.message : "Login failed");
+        if (
+          err?.code === "auth/invalid-credential" ||
+          err?.code === "auth/user-not-found" ||
+          err?.code === "auth/wrong-password"
+        ) {
+          try {
+            const methods = await fetchSignInMethodsForEmail(auth, email);
+            const gmailFallback = getGmailHeuristic(email);
+            if (methods.includes("google.com") || gmailFallback) {
+              setAuthError(
+                "That email is already associated with an existing account. Please continue with Google."
+              );
+            } else {
+              setAuthError(getFriendlyAuthError(err, "Login failed"));
+            }
+          } catch (lookupError) {
+            const gmailFallback = getGmailHeuristic(email);
+            if (gmailFallback) {
+              setAuthError(
+                "That email is already associated with an existing account. Please continue with Google."
+              );
+            } else {
+              setAuthError(getFriendlyAuthError(err, "Login failed"));
+            }
+          }
+        } else {
+          setAuthError(getFriendlyAuthError(err, "Login failed"));
+        }
         setStatus("unauthenticated");
         throw err;
       } finally {
@@ -185,11 +282,34 @@ export function AuthProvider({ children }) {
   );
 
   const registerWithEmail = useCallback(
-    async ({ firstName, lastName, email, password }) => {
+    async ({ email, password, firstName, lastName }) => {
       setIsProcessingLogin(true);
       clearAuthError();
 
       try {
+        try {
+          const methods = await fetchSignInMethodsForEmail(auth, email);
+          const providerLabels = methods
+            .map((method) => getProviderLabelForMethod(method))
+            .filter(Boolean);
+          const gmailFallback = getGmailHeuristic(email);
+
+          if (providerLabels.length > 0 || gmailFallback) {
+            const labels = providerLabels.length > 0 ? providerLabels : [gmailFallback];
+            setAuthError(buildExistingAccountMessage(labels));
+            setStatus("unauthenticated");
+            return;
+          }
+
+          if (methods.length > 0) {
+            setAuthError(buildExistingAccountMessage([]));
+            setStatus("unauthenticated");
+            return;
+          }
+        } catch (lookupError) {
+          // If lookup fails, continue with signup and let Firebase handle it.
+        }
+
         const credential = await createUserWithEmailAndPassword(auth, email, password);
         const displayName = [firstName, lastName].filter(Boolean).join(" ").trim();
         if (displayName) {
@@ -198,7 +318,7 @@ export function AuthProvider({ children }) {
         await establishSessionFromUser(credential.user);
       } catch (err) {
         console.error("Email signup failed", err);
-        setAuthError(err instanceof Error ? err.message : "Sign up failed");
+        setAuthError(getFriendlyAuthError(err, "Sign up failed"));
         setStatus("unauthenticated");
         throw err;
       } finally {

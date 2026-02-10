@@ -6,6 +6,8 @@ import { useAuth } from "./context/AuthContext.jsx";
 import AdminDashboard from "./pages/AdminDashboard.jsx";
 import AdminLibrary from "./pages/AdminLibrary.jsx";
 import AdminUsers from "./pages/AdminUsers.jsx";
+import Account from "./pages/Account.jsx";
+import AuthPage from "./pages/AuthPage.jsx";
 import { fetchWithOrigin } from "./utils/apiClient.js";
 import {
   getCrashOptions,
@@ -265,6 +267,7 @@ function PlayerApp() {
   } = useAuth();
   const navigate = useNavigate();
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authModalMode, setAuthModalMode] = useState("signin");
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [roundSource, setRoundSource] = useState([]);
   const [roundHeatMode, setRoundHeatMode] = useState(DEFAULT_HEAT_MODE);
@@ -1318,7 +1321,12 @@ function PlayerApp() {
 
   const handleShowSignIn = () => {
     clearAuthError();
-    setShowAuthModal(true);
+    navigate("/login");
+  };
+
+  const handleShowSignUp = () => {
+    clearAuthError();
+    navigate("/signup");
   };
 
   const handlePracticeRequest = async (
@@ -1333,6 +1341,7 @@ function PlayerApp() {
     });
     if (isUnauthenticated) {
       clearAuthError();
+      setAuthModalMode("signin");
       setShowAuthModal(true);
       return;
     }
@@ -1375,6 +1384,7 @@ function PlayerApp() {
 
       if (res.status === 401) {
         clearAuthError();
+        setAuthModalMode("signin");
         setShowAuthModal(true);
         setPracticeLoadingDance(null);
         setPracticeError(null);
@@ -1714,6 +1724,7 @@ function PlayerApp() {
       authPromptReasonRef.current = "round-start";
       clearAuthPromptTimeout();
       clearAuthError();
+      setAuthModalMode("signin");
       setIsPlaying(false);
       setShowAuthModal(true);
       return;
@@ -3544,12 +3555,25 @@ const roundTransportControls =
           setShowAuthModal(false);
           clearAuthError();
         }}
+        variant="prompt"
+        promptTitle="Start jiving now"
+        promptPrimaryLabel="Sign up"
+        promptSecondaryLabel="Log in"
+        onPromptPrimary={() => {
+          setShowAuthModal(false);
+          navigate("/signup");
+        }}
+        onPromptSecondary={() => {
+          setShowAuthModal(false);
+          navigate("/login");
+        }}
         onSelectProvider={handleProviderLogin}
         onEmailLogin={handleEmailLogin}
         onEmailSignup={handleEmailSignup}
         isProcessing={isProcessingLogin}
         error={authError}
         onRetry={() => clearAuthError()}
+        initialMode={authModalMode}
       />
       <FeedbackModal
         isOpen={showFeedbackModal}
@@ -3614,6 +3638,16 @@ const roundTransportControls =
                   <button
                     type="button"
                     className="app-menu-item"
+                    onClick={() => {
+                      setIsAuthMenuOpen(false);
+                      navigate("/account");
+                    }}
+                  >
+                    Account
+                  </button>
+                  <button
+                    type="button"
+                    className="app-menu-item"
                     onClick={handleSignOut}
                   >
                     Sign Out
@@ -3625,10 +3659,17 @@ const roundTransportControls =
             <div className="app-menu-bar">
               <button
                 type="button"
+                className="neomorphus-button app-menu-button secondary"
+                onClick={handleShowSignUp}
+              >
+                Sign Up
+              </button>
+              <button
+                type="button"
                 className="neomorphus-button app-menu-button"
                 onClick={handleShowSignIn}
               >
-                Sign In
+                Log In
               </button>
             </div>
           )}
@@ -3747,7 +3788,7 @@ const roundTransportControls =
                           </ul>
                         ) : (
                           <p style={{ color: "#b5bac6", margin: 0 }}>
-                            Sign in to start this round.
+                            Log in to start this round.
                           </p>
                         )}
                       </div>
@@ -3935,6 +3976,25 @@ const roundTransportControls =
           </div>
         </div>
       </div>
+      {!isAuthenticated ? (
+        <div className="preview-banner">
+          <div className="preview-banner-content">
+            <div>
+              <div className="preview-banner-title">Preview of Muzon</div>
+              <div className="preview-banner-subtitle">
+                Sign up to unlock full rounds and practice features.
+              </div>
+            </div>
+            <button
+              type="button"
+              className="preview-banner-button"
+              onClick={handleShowSignUp}
+            >
+              Sign up free
+            </button>
+          </div>
+        </div>
+      ) : null}
     </>
   );
 }
@@ -3943,6 +4003,9 @@ function App() {
   return (
     <Routes>
       <Route path="/" element={<PlayerApp />} />
+      <Route path="/login" element={<AuthPage initialMode="signin" />} />
+      <Route path="/signup" element={<AuthPage initialMode="signup" />} />
+      <Route path="/account" element={<Account />} />
       <Route path="/admin" element={<AdminDashboard />} />
       <Route path="/admin/library" element={<AdminLibrary />} />
       <Route path="/admin/users" element={<AdminUsers />} />

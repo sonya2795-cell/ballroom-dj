@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import AuthModal from "../components/AuthModal.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { fetchWithOrigin } from "../utils/apiClient.js";
@@ -274,6 +274,7 @@ function Player() {
     logout,
     isAdmin,
   } = useAuth();
+  const navigate = useNavigate();
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [isAuthMenuOpen, setIsAuthMenuOpen] = useState(false);
   const [roundSource, setRoundSource] = useState([]);
@@ -1011,7 +1012,8 @@ function Player() {
 
   const handleAccountClick = useCallback(() => {
     setIsAuthMenuOpen(false);
-  }, []);
+    navigate("/account");
+  }, [navigate]);
   const handleRestartRound = () => {
     if (breakTimeLeft !== null) {
       const targetIndex =
@@ -1058,7 +1060,7 @@ function Player() {
 
   const handleShowSignIn = () => {
     clearAuthError();
-    setShowAuthModal(true);
+    navigate("/login");
   };
 
   const handlePracticeRequest = async (
@@ -2222,6 +2224,18 @@ function Player() {
           setShowAuthModal(false);
           clearAuthError();
         }}
+        variant="prompt"
+        promptTitle="Start jiving now"
+        promptPrimaryLabel="Sign up"
+        promptSecondaryLabel="Log in"
+        onPromptPrimary={() => {
+          setShowAuthModal(false);
+          navigate("/signup");
+        }}
+        onPromptSecondary={() => {
+          setShowAuthModal(false);
+          navigate("/login");
+        }}
         onSelectProvider={handleProviderLogin}
         onEmailLogin={handleEmailLogin}
         onEmailSignup={handleEmailSignup}
@@ -2303,7 +2317,7 @@ function Player() {
             className="neomorphus-button sign-in-button"
             onClick={handleShowSignIn}
           >
-            Sign In
+            Log In
           </button>
         </div>
       )}
@@ -2565,7 +2579,7 @@ function Player() {
                   </>
                 ) : (
                   <p style={{ color: "#b5bac6", margin: 0 }}>
-                    Sign in to start this round.
+                            Log in to start this round.
                   </p>
                 )}
                 <div
@@ -2738,6 +2752,25 @@ function Player() {
           ) : null}
         </div>
       </div>
+      {!isAuthenticated ? (
+        <div className="preview-banner">
+          <div className="preview-banner-content">
+            <div>
+              <div className="preview-banner-title">Preview of Muzon</div>
+              <div className="preview-banner-subtitle">
+                Sign up to unlock full rounds and practice features.
+              </div>
+            </div>
+            <button
+              type="button"
+              className="preview-banner-button"
+              onClick={() => navigate("/signup")}
+            >
+              Sign up free
+            </button>
+          </div>
+        </div>
+      ) : null}
     </>
   );
 }
