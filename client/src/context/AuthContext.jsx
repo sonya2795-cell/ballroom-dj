@@ -3,12 +3,11 @@ import {
   FacebookAuthProvider,
   GoogleAuthProvider,
   OAuthProvider,
-  createUserWithEmailAndPassword,
   fetchSignInMethodsForEmail,
   signInWithEmailAndPassword,
+  signInWithCustomToken,
   signInWithPopup,
   signOut,
-  updateProfile,
 } from "firebase/auth";
 import { auth } from "../firebase";
 import { fetchWithOrigin } from "../utils/apiClient.js";
@@ -94,6 +93,21 @@ function getFriendlyAuthError(error, fallbackMessage) {
       return "Email/password sign-in is not enabled yet. Contact support.";
     default:
       return fallbackMessage;
+  }
+}
+
+function getFriendlySignupCompletionError(code) {
+  switch (code) {
+    case "invalid":
+      return "That verification link or code is invalid. Please request a new one.";
+    case "expired":
+      return "That verification link expired. Please request a new one.";
+    case "used":
+      return "That verification link was already used. Please request a new one.";
+    case "exists":
+      return "That email is already associated with an existing account. Please log in instead.";
+    default:
+      return "We couldn't finish your signup. Please try again.";
   }
 }
 
@@ -282,50 +296,90 @@ export function AuthProvider({ children }) {
   );
 
   const registerWithEmail = useCallback(
-    async ({ email, password, firstName, lastName }) => {
+    async ({ email }) => {
       setIsProcessingLogin(true);
       clearAuthError();
 
       try {
-        try {
-          const methods = await fetchSignInMethodsForEmail(auth, email);
-          const providerLabels = methods
-            .map((method) => getProviderLabelForMethod(method))
-            .filter(Boolean);
-          const gmailFallback = getGmailHeuristic(email);
+        const response = await fetchWithOrigin("/auth/email/start", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          credentials: "include",
+          body: JSON.stringify({ email }),
+        });
 
-          if (providerLabels.length > 0 || gmailFallback) {
-            const labels = providerLabels.length > 0 ? providerLabels : [gmailFallback];
-            setAuthError(buildExistingAccountMessage(labels));
-            setStatus("unauthenticated");
-            return;
-          }
-
-          if (methods.length > 0) {
-            setAuthError(buildExistingAccountMessage([]));
-            setStatus("unauthenticated");
-            return;
-          }
-        } catch (lookupError) {
-          // If lookup fails, continue with signup and let Firebase handle it.
+        if (!response.ok) {
+          const payload = await response.json().catch(() => null);
+          const message =
+            payload?.error || "We couldn't send a verification email. Please try again.";
+          setAuthError(message);
+          setStatus("unauthenticated");
+          throw new Error(message);
         }
-
-        const credential = await createUserWithEmailAndPassword(auth, email, password);
-        const displayName = [firstName, lastName].filter(Boolean).join(" ").trim();
-        if (displayName) {
-          await updateProfile(credential.user, { displayName });
-        }
-        await establishSessionFromUser(credential.user);
       } catch (err) {
         console.error("Email signup failed", err);
-        setAuthError(getFriendlyAuthError(err, "Sign up failed"));
+        if (!authError) {
+          setAuthError(getFriendlyAuthError(err, "Sign up failed"));
+        }
         setStatus("unauthenticated");
         throw err;
       } finally {
         setIsProcessingLogin(false);
       }
     },
-    [clearAuthError, establishSessionFromUser]
+    [authError, clearAuthError]
+  );
+
+  const completeEmailSignup = useCallback(
+    async ({ verificationSessionToken, password, firstName, lastName }) => {
+      setIsProcessingLogin(true);
+      clearAuthError();
+
+      try {
+        const response = await fetchWithOrigin("/auth/email/complete", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          credentials: "include",
+          body: JSON.stringify({
+            verificationSessionToken,
+            password,
+            firstName,
+            lastName,
+          }),
+        });
+
+        const payload = await response.json().catch(() => null);
+
+        if (!response.ok) {
+          const message = getFriendlySignupCompletionError(payload?.error);
+          setAuthError(message);
+          setStatus("unauthenticated");
+          throw new Error(message);
+        }
+
+        if (!payload?.customToken) {
+          throw new Error("Missing custom token");
+        }
+
+        const credential = await signInWithCustomToken(auth, payload.customToken);
+        await establishSessionFromUser(credential.user);
+        return credential.user;
+      } catch (err) {
+        console.error("Completing signup failed", err);
+        if (!authError) {
+          setAuthError(getFriendlyAuthError(err, "Sign up failed"));
+        }
+        setStatus("unauthenticated");
+        throw err;
+      } finally {
+        setIsProcessingLogin(false);
+      }
+    },
+    [authError, clearAuthError, establishSessionFromUser]
   );
 
   const logout = useCallback(async () => {
@@ -360,6 +414,7 @@ export function AuthProvider({ children }) {
       login,
       loginWithEmail,
       registerWithEmail,
+      completeEmailSignup,
       logout,
       refreshSession: fetchSession,
       isProcessingLogin,
@@ -372,6 +427,7 @@ export function AuthProvider({ children }) {
       login,
       loginWithEmail,
       registerWithEmail,
+      completeEmailSignup,
       logout,
       fetchSession,
       isProcessingLogin,

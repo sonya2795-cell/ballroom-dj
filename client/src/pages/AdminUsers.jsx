@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
-import { fetchAdminUsers } from "../services/adminService.js";
+import { deleteAdminUser, fetchAdminUsers } from "../services/adminService.js";
 
 const containerStyle = {
   minHeight: "100vh",
@@ -152,6 +152,7 @@ export default function AdminUsers() {
   const [roleFilter, setRoleFilter] = useState("all");
   const [sortKey, setSortKey] = useState("lastSignInTime");
   const [sortDirection, setSortDirection] = useState("desc");
+  const [deletingUid, setDeletingUid] = useState(null);
 
   const loadUsers = useCallback(
     async (options = {}) => {
@@ -271,6 +272,32 @@ export default function AdminUsers() {
     );
   };
 
+  const handleDeleteUser = useCallback(
+    async (entry) => {
+      if (!entry?.uid) return;
+      if (entry.uid === user?.uid) {
+        setError("You cannot delete your own account.");
+        return;
+      }
+      const confirmed = window.confirm(
+        `Delete account for ${entry.email || entry.uid}? This cannot be undone.`
+      );
+      if (!confirmed) return;
+
+      setDeletingUid(entry.uid);
+      setError("");
+      try {
+        await deleteAdminUser(entry.uid);
+        setUsers((prev) => prev.filter((item) => item.uid !== entry.uid));
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to delete user");
+      } finally {
+        setDeletingUid(null);
+      }
+    },
+    [user?.uid]
+  );
+
   return (
     <div style={containerStyle}>
       <header style={headerStyle}>
@@ -389,11 +416,14 @@ export default function AdminUsers() {
                       <th style={cellStyle}>{renderSortLabel("role", "Role")}</th>
                       <th style={cellStyle}>{renderSortLabel("created", "Created")}</th>
                       <th style={cellStyle}>{renderSortLabel("lastSignIn", "Last sign-in")}</th>
+                      <th style={cellStyle}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {sortedUsers.map((entry) => {
                       const { firstName, lastName } = splitName(entry.displayName);
+                      const isDeleting = deletingUid === entry.uid;
+                      const isSelf = entry.uid === user?.uid;
                       return (
                         <tr key={entry.uid}>
                           <td style={cellStyle}>
@@ -411,6 +441,24 @@ export default function AdminUsers() {
                           <td style={cellStyle}>{entry.customClaims?.role || "user"}</td>
                           <td style={cellStyle}>{formatDateTime(entry.creationTime)}</td>
                           <td style={cellStyle}>{formatDateTime(entry.lastSignInTime)}</td>
+                          <td style={cellStyle}>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteUser(entry)}
+                              disabled={isDeleting || isSelf}
+                              style={{
+                                padding: "0.35rem 0.7rem",
+                                borderRadius: "999px",
+                                background: isSelf ? "rgba(255,255,255,0.1)" : "#e05555",
+                                border: "none",
+                                color: isSelf ? "rgba(255,255,255,0.6)" : "#10141b",
+                                fontWeight: 600,
+                                cursor: isSelf ? "not-allowed" : "pointer",
+                              }}
+                            >
+                              {isDeleting ? "Deleting..." : "Delete"}
+                            </button>
+                          </td>
                         </tr>
                       );
                     })}

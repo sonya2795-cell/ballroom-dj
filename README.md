@@ -32,7 +32,20 @@ Google, Facebook, or Apple before starting a round.
 4. For local development, leave the defaults (`http://localhost:5173`) and run
    both client and server on the same machine.
 
-5. To forward in-app bug reports to your inbox, set either the HTTPS email API
+5. Email/password signup verification uses the Resend API. Configure:
+
+   ```env
+   RESEND_API_KEY=your-resend-api-key
+   AUTH_VERIFICATION_FROM=Muzon <no-reply@muzonapp.com>
+   PUBLIC_APP_URL=https://muzonapp.com
+   PUBLIC_API_URL=https://muzonapp.com
+   ```
+
+   `PUBLIC_API_URL` should point to the backend base URL that serves
+   `/auth/email/verify`. `PUBLIC_APP_URL` is where the user is redirected to
+   finish setting their password (e.g. `/set-password`).
+
+6. To forward in-app bug reports to your inbox, set either the HTTPS email API
    (recommended for production) or SMTP values inside `server/.env`:
 
    Recommended (Resend API):

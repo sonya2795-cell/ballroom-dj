@@ -34,3 +34,19 @@ export async function fetchAdminUsers({ limit = 200, pageToken } = {}) {
 
   return response.json();
 }
+
+export async function deleteAdminUser(uid) {
+  if (!uid) {
+    throw new Error("Missing user id");
+  }
+  const response = await fetchWithOrigin(`/api/admin/users/${encodeURIComponent(uid)}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    const message = payload?.error || "Failed to delete user";
+    throw new Error(message);
+  }
+}

@@ -8,6 +8,8 @@ import AdminLibrary from "./pages/AdminLibrary.jsx";
 import AdminUsers from "./pages/AdminUsers.jsx";
 import Account from "./pages/Account.jsx";
 import AuthPage from "./pages/AuthPage.jsx";
+import SetPasswordPage from "./pages/SetPassword.jsx";
+import VerifyEmailPage from "./pages/VerifyEmail.jsx";
 import { fetchWithOrigin } from "./utils/apiClient.js";
 import {
   getCrashOptions,
@@ -4176,6 +4178,8 @@ function App() {
       <Route path="/" element={<PlayerApp />} />
       <Route path="/login" element={<AuthPage initialMode="signin" />} />
       <Route path="/signup" element={<AuthPage initialMode="signup" />} />
+      <Route path="/verify" element={<VerifyEmailPage />} />
+      <Route path="/set-password" element={<SetPasswordPage />} />
       <Route path="/account" element={<Account />} />
       <Route path="/admin" element={<AdminDashboard />} />
       <Route path="/admin/library" element={<AdminLibrary />} />

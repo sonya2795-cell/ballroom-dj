@@ -1,4 +1,5 @@
 require("dotenv").config();
+const crypto = require("crypto");
 const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
@@ -11,6 +12,7 @@ const {
   buildCrashUpdateFromPayload,
 } = require("./crashUtils");
 const { sendFeedbackEmail } = require("./email/sendFeedbackEmail");
+const { sendVerificationEmail } = require("./email/sendVerificationEmail");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -22,6 +24,10 @@ const allowedOrigins = rawClientOrigins
 const isProduction = process.env.NODE_ENV === "production";
 const SESSION_COOKIE_NAME = "ballroom_session";
 const SESSION_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 5; // 5 days
+const EMAIL_VERIFICATION_TTL_MS = 1000 * 60 * 10; // 10 minutes
+const VERIFICATION_SESSION_TTL_MS = 1000 * 60 * 10; // 10 minutes
+const EMAIL_VERIFICATION_RESEND_COOLDOWN_MS = 1000 * 60; // 60 seconds
+const PASSWORD_MIN_LENGTH = 6;
 const DEFAULT_FEEDBACK_MAX_FILES = 3;
 const DEFAULT_FEEDBACK_MAX_FILE_SIZE_BYTES = 8 * 1024 * 1024; // 8MB
 const FEEDBACK_DESCRIPTION_MAX_LENGTH = 2000;
@@ -35,6 +41,9 @@ const FEEDBACK_ALLOWED_MIME_TYPES = new Set([
   "image/heif",
 ]);
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const EMAIL_VERIFICATION_COLLECTION = "emailVerificationTokens";
+const EMAIL_VERIFICATION_REQUESTS_COLLECTION = "emailVerificationRequests";
+const EMAIL_VERIFICATION_SESSIONS_COLLECTION = "emailVerificationSessions";
 
 const resolvedFeedbackMaxFiles = Number(process.env.FEEDBACK_MAX_ATTACHMENTS);
 const FEEDBACK_MAX_ATTACHMENTS =
@@ -453,6 +462,11 @@ const baseCookieOptions = {
   path: "/",
 };
 
+const defaultAppOrigin = allowedOrigins[0] || "http://localhost:5173";
+const PUBLIC_APP_URL = process.env.PUBLIC_APP_URL?.trim() || defaultAppOrigin;
+const PUBLIC_API_URL =
+  process.env.PUBLIC_API_URL?.trim() || `http://localhost:${PORT}`;
+
 const cookieOptionsWithAge = {
   ...baseCookieOptions,
   maxAge: SESSION_MAX_AGE_MS,
@@ -477,6 +491,51 @@ function sanitizeText(value) {
     return "";
   }
   return value.trim();
+}
+
+function normalizeEmail(value) {
+  if (typeof value !== "string") return "";
+  return value.trim().toLowerCase();
+}
+
+function hashToken(value) {
+  return crypto.createHash("sha256").update(value).digest("hex");
+}
+
+function timingSafeEquals(a, b) {
+  const aBuf = Buffer.from(a || "");
+  const bBuf = Buffer.from(b || "");
+  if (aBuf.length !== bBuf.length) {
+    const max = Math.max(aBuf.length, bBuf.length);
+    const paddedA = Buffer.alloc(max);
+    const paddedB = Buffer.alloc(max);
+    aBuf.copy(paddedA);
+    bBuf.copy(paddedB);
+    crypto.timingSafeEqual(paddedA, paddedB);
+    return false;
+  }
+  return crypto.timingSafeEqual(aBuf, bBuf);
+}
+
+function getRequestIp(req) {
+  const forwarded = req.headers["x-forwarded-for"];
+  if (typeof forwarded === "string" && forwarded.length > 0) {
+    return forwarded.split(",")[0].trim();
+  }
+  return req.ip || "";
+}
+
+function buildVerificationRedirect(pathname, queryParams) {
+  const base = PUBLIC_APP_URL.replace(/\/+$/, "");
+  const url = new URL(`${base}/${pathname.replace(/^\/+/, "")}`);
+  if (queryParams) {
+    Object.entries(queryParams).forEach(([key, value]) => {
+      if (value !== null && typeof value !== "undefined") {
+        url.searchParams.set(key, String(value));
+      }
+    });
+  }
+  return url.toString();
 }
 
 async function getOptionalSessionUser(req) {
@@ -548,6 +607,350 @@ app.post("/auth/session", async (req, res) => {
   } catch (err) {
     console.error("Error creating session cookie", err);
     res.status(401).json({ error: "Unauthorized" });
+  }
+});
+
+app.post("/auth/email/start", async (req, res) => {
+  const email = normalizeEmail(req.body?.email);
+  if (!email || !EMAIL_REGEX.test(email)) {
+    res.status(400).json({ error: "Enter a valid email address." });
+    return;
+  }
+
+  const emailHash = hashToken(email);
+  const requestRef = firestore
+    .collection(EMAIL_VERIFICATION_REQUESTS_COLLECTION)
+    .doc(emailHash);
+  const ipAddress = getRequestIp(req);
+  const userAgent = sanitizeString(req.headers["user-agent"], 300);
+
+  let canSend = true;
+
+  try {
+    await firestore.runTransaction(async (tx) => {
+      const snapshot = await tx.get(requestRef);
+      const nowMs = Date.now();
+      const lastSentAt = snapshot.exists
+        ? snapshot.data()?.lastSentAt?.toMillis?.() ?? null
+        : null;
+
+      if (lastSentAt && nowMs - lastSentAt < EMAIL_VERIFICATION_RESEND_COOLDOWN_MS) {
+        canSend = false;
+      }
+
+      const updatePayload = {
+        email,
+        emailHash,
+        lastAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
+        lastIp: ipAddress || null,
+        lastUserAgent: userAgent || null,
+        attemptCount: admin.firestore.FieldValue.increment(1),
+      };
+
+      if (canSend) {
+        updatePayload.lastSentAt = admin.firestore.FieldValue.serverTimestamp();
+        updatePayload.sentCount = admin.firestore.FieldValue.increment(1);
+      }
+
+      tx.set(requestRef, updatePayload, { merge: true });
+    });
+  } catch (err) {
+    console.error("Failed to track email verification request", err);
+  }
+
+  if (!canSend) {
+    res.json({ ok: true });
+    return;
+  }
+
+  const rawToken = crypto.randomBytes(32).toString("base64url");
+  const tokenHash = hashToken(rawToken);
+  const expiresAt = admin.firestore.Timestamp.fromDate(
+    new Date(Date.now() + EMAIL_VERIFICATION_TTL_MS)
+  );
+  const verificationRef = firestore
+    .collection(EMAIL_VERIFICATION_COLLECTION)
+    .doc(tokenHash);
+
+  await verificationRef.set({
+    tokenHash,
+    email,
+    emailHash,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    expiresAt,
+    consumedAt: null,
+    lastAttemptAt: null,
+    failCount: 0,
+    ipAddress: ipAddress || null,
+    userAgent: userAgent || null,
+  });
+
+  const apiBase = PUBLIC_API_URL.replace(/\/+$/, "");
+  const verifyLink = `${apiBase}/auth/email/verify?token=${encodeURIComponent(rawToken)}`;
+
+  try {
+    await sendVerificationEmail({
+      to: email,
+      verifyLink,
+      token: rawToken,
+    });
+  } catch (err) {
+    console.error("Failed to send verification email", err);
+    await verificationRef.delete();
+    res.status(500).json({ error: "Unable to send verification email." });
+    return;
+  }
+
+  res.json({ ok: true });
+});
+
+async function createVerificationSession({ email, emailHash, tokenHash, req }) {
+  const sessionToken = crypto.randomBytes(32).toString("base64url");
+  const sessionHash = hashToken(sessionToken);
+  const sessionRef = firestore
+    .collection(EMAIL_VERIFICATION_SESSIONS_COLLECTION)
+    .doc(sessionHash);
+  const expiresAt = admin.firestore.Timestamp.fromDate(
+    new Date(Date.now() + VERIFICATION_SESSION_TTL_MS)
+  );
+
+  await sessionRef.set({
+    sessionHash,
+    email,
+    emailHash,
+    verificationTokenHash: tokenHash,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    expiresAt,
+    consumedAt: null,
+    ipAddress: getRequestIp(req) || null,
+    userAgent: sanitizeString(req.headers["user-agent"], 300),
+  });
+
+  return sessionToken;
+}
+
+async function consumeVerificationToken({ rawToken, req }) {
+  if (!rawToken) {
+    return { ok: false, error: "invalid" };
+  }
+
+  const tokenHash = hashToken(rawToken);
+  const tokenRef = firestore.collection(EMAIL_VERIFICATION_COLLECTION).doc(tokenHash);
+  const snapshot = await tokenRef.get();
+
+  if (!snapshot.exists) {
+    return { ok: false, error: "invalid" };
+  }
+
+  const data = snapshot.data() || {};
+  const storedHash = data.tokenHash || "";
+  if (!timingSafeEquals(tokenHash, storedHash)) {
+    return { ok: false, error: "invalid" };
+  }
+
+  const nowMs = Date.now();
+  const expiresAtMs = data.expiresAt?.toMillis?.() ?? null;
+  const consumedAtMs = data.consumedAt?.toMillis?.() ?? null;
+
+  if (consumedAtMs) {
+    await tokenRef.set(
+      {
+        lastAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
+        failCount: admin.firestore.FieldValue.increment(1),
+      },
+      { merge: true }
+    );
+    return { ok: false, error: "used" };
+  }
+
+  if (expiresAtMs && nowMs > expiresAtMs) {
+    await tokenRef.set(
+      {
+        lastAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
+        failCount: admin.firestore.FieldValue.increment(1),
+      },
+      { merge: true }
+    );
+    return { ok: false, error: "expired" };
+  }
+
+  const email = data.email || "";
+  const emailHash = data.emailHash || "";
+
+  await tokenRef.set(
+    {
+      consumedAt: admin.firestore.FieldValue.serverTimestamp(),
+      lastAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+
+  try {
+    await admin.auth().getUserByEmail(email);
+    return { ok: false, error: "exists" };
+  } catch (err) {
+    if (err?.code !== "auth/user-not-found") {
+      console.error("Failed to check existing user", err);
+      return { ok: false, error: "server" };
+    }
+  }
+
+  const sessionToken = await createVerificationSession({
+    email,
+    emailHash,
+    tokenHash,
+    req,
+  });
+
+  return { ok: true, sessionToken };
+}
+
+app.get("/auth/email/verify", async (req, res) => {
+  const rawToken = typeof req.query.token === "string" ? req.query.token : "";
+
+  try {
+    const result = await consumeVerificationToken({ rawToken, req });
+    if (!result.ok) {
+      const error = result.error === "server" ? "error" : result.error;
+      const redirectUrl = buildVerificationRedirect("verify", { error });
+      res.redirect(302, redirectUrl);
+      return;
+    }
+
+    const redirectUrl = buildVerificationRedirect("set-password", {
+      vs: result.sessionToken,
+    });
+    res.redirect(302, redirectUrl);
+  } catch (err) {
+    console.error("Failed to verify email token", err);
+    const redirectUrl = buildVerificationRedirect("verify", { error: "error" });
+    res.redirect(302, redirectUrl);
+  }
+});
+
+app.post("/auth/email/verify", async (req, res) => {
+  const rawToken = sanitizeText(req.body?.token);
+  try {
+    const result = await consumeVerificationToken({ rawToken, req });
+    if (!result.ok) {
+      const status = result.error === "expired" ? 410 : 400;
+      res.status(status).json({ error: result.error });
+      return;
+    }
+
+    res.json({ verificationSessionToken: result.sessionToken });
+  } catch (err) {
+    console.error("Failed to verify email token", err);
+    res.status(500).json({ error: "server" });
+  }
+});
+
+app.post("/auth/email/complete", async (req, res) => {
+  const sessionToken = sanitizeText(req.body?.verificationSessionToken);
+  const password = typeof req.body?.password === "string" ? req.body.password : "";
+  const firstName = sanitizeText(req.body?.firstName);
+  const lastName = sanitizeText(req.body?.lastName);
+
+  if (!sessionToken) {
+    res.status(400).json({ error: "Missing verification session token." });
+    return;
+  }
+
+  if (!firstName || !lastName) {
+    res.status(400).json({ error: "First and last name are required." });
+    return;
+  }
+
+  if (!password || password.length < PASSWORD_MIN_LENGTH) {
+    res.status(400).json({
+      error: `Password must be at least ${PASSWORD_MIN_LENGTH} characters.`,
+    });
+    return;
+  }
+
+  const sessionHash = hashToken(sessionToken);
+  const sessionRef = firestore
+    .collection(EMAIL_VERIFICATION_SESSIONS_COLLECTION)
+    .doc(sessionHash);
+
+  const snapshot = await sessionRef.get();
+  if (!snapshot.exists) {
+    res.status(400).json({ error: "invalid" });
+    return;
+  }
+
+  const data = snapshot.data() || {};
+  if (!timingSafeEquals(sessionHash, data.sessionHash || "")) {
+    res.status(400).json({ error: "invalid" });
+    return;
+  }
+
+  const nowMs = Date.now();
+  const expiresAtMs = data.expiresAt?.toMillis?.() ?? null;
+  const consumedAtMs = data.consumedAt?.toMillis?.() ?? null;
+
+  if (consumedAtMs) {
+    res.status(400).json({ error: "used" });
+    return;
+  }
+
+  if (expiresAtMs && nowMs > expiresAtMs) {
+    res.status(410).json({ error: "expired" });
+    return;
+  }
+
+  const email = data.email || "";
+  if (!email || !EMAIL_REGEX.test(email)) {
+    res.status(400).json({ error: "invalid" });
+    return;
+  }
+
+  try {
+    await admin.auth().getUserByEmail(email);
+    res.status(409).json({ error: "exists" });
+    return;
+  } catch (err) {
+    if (err?.code !== "auth/user-not-found") {
+      console.error("Failed to check existing user during signup", err);
+      res.status(500).json({ error: "server" });
+      return;
+    }
+  }
+
+  try {
+    const displayName = `${firstName} ${lastName}`.trim();
+    const userRecord = await admin.auth().createUser({
+      email,
+      password,
+      emailVerified: true,
+      displayName,
+    });
+    const customToken = await admin.auth().createCustomToken(userRecord.uid);
+
+    await sessionRef.set(
+      {
+        consumedAt: admin.firestore.FieldValue.serverTimestamp(),
+        completedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    const requestRef = firestore
+      .collection(EMAIL_VERIFICATION_REQUESTS_COLLECTION)
+      .doc(hashToken(email));
+    await requestRef.set(
+      { lastSuccessAt: admin.firestore.FieldValue.serverTimestamp() },
+      { merge: true }
+    );
+
+    res.json({ customToken });
+  } catch (err) {
+    console.error("Failed to create user from verification", err);
+    if (err?.code === "auth/email-already-exists") {
+      res.status(409).json({ error: "exists" });
+      return;
+    }
+    res.status(500).json({ error: "server" });
   }
 });
 
@@ -1102,6 +1505,27 @@ app.get("/api/admin/users", requireAuth, requireAdmin, async (req, res) => {
   } catch (err) {
     console.error("Failed to load admin users", err);
     res.status(500).json({ error: "Failed to load users" });
+  }
+});
+
+app.delete("/api/admin/users/:uid", requireAuth, requireAdmin, async (req, res) => {
+  const uid = sanitizeString(req.params.uid, 200);
+  if (!uid) {
+    res.status(400).json({ error: "Missing user id" });
+    return;
+  }
+
+  if (req.firebaseUser?.uid === uid) {
+    res.status(400).json({ error: "You cannot delete your own account." });
+    return;
+  }
+
+  try {
+    await admin.auth().deleteUser(uid);
+    res.status(204).end();
+  } catch (err) {
+    console.error("Failed to delete user", err);
+    res.status(500).json({ error: "Failed to delete user" });
   }
 });
 

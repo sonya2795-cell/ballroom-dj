@@ -8,8 +8,6 @@ const FORM_MODES = {
   signup: "signup",
 };
 const INITIAL_FORM_STATE = {
-  firstName: "",
-  lastName: "",
   email: "",
   password: "",
 };
@@ -58,8 +56,6 @@ export default function AuthModal({
 
   const displayError = localError || error;
   const isSignup = mode === FORM_MODES.signup;
-  const isSignupPage = isSignup && variant === "page";
-
   const formTitle =
     pageTitle || (isSignup ? "Create your account" : "Log in to keep the music going");
   const formSubtitle =
@@ -70,8 +66,7 @@ export default function AuthModal({
           ? "Use your email address as your username."
           : "Use your email address and password to continue.");
   const primaryButtonLabel = submitLabel || (isSignup ? "Create account" : "Log in");
-  const resolvedPrimaryLabel =
-    isSignupPage && signupStep === "email" ? "Next" : primaryButtonLabel;
+  const resolvedPrimaryLabel = primaryButtonLabel;
   const dividerLabel = dividerText || "or continue with";
   const resolvedEmailLabel = emailLabel || "Email (username)";
 
@@ -99,30 +94,6 @@ export default function AuthModal({
       return;
     }
 
-    if (isSignupPage && signupStep === "email") {
-      setLocalError("");
-      setSignupStep("password");
-      return;
-    }
-
-    if ((isSignup && isSignupPage && signupStep === "password") || !isSignup) {
-      if (!formState.password) {
-        if (onRetry) onRetry();
-        setLocalError("Please enter your password.");
-        return;
-      }
-    }
-
-    if (isSignup && isSignupPage && signupStep === "password") {
-      const trimmedFirstName = formState.firstName.trim();
-      const trimmedLastName = formState.lastName.trim();
-      if (!trimmedFirstName || !trimmedLastName) {
-        if (onRetry) onRetry();
-        setLocalError("Please enter your first and last name.");
-        return;
-      }
-    }
-
     if (!isSignup && !formState.password) {
       if (onRetry) onRetry();
       setLocalError("Please enter your password.");
@@ -131,12 +102,8 @@ export default function AuthModal({
 
     try {
       if (isSignup) {
-        await onEmailSignup({
-          email: trimmedEmail,
-          password: formState.password,
-          firstName: formState.firstName.trim(),
-          lastName: formState.lastName.trim(),
-        });
+        await onEmailSignup({ email: trimmedEmail });
+        setSignupStep("sent");
       } else {
         await onEmailLogin({
           email: trimmedEmail,
@@ -191,7 +158,11 @@ export default function AuthModal({
                 <button
                   type="button"
                   className={`auth-mode-button${!isSignup ? " is-active" : ""}`}
-                  onClick={() => setMode(FORM_MODES.signin)}
+                  onClick={() => {
+                    setMode(FORM_MODES.signin);
+                    setSignupStep("email");
+                    setLocalError("");
+                  }}
                   disabled={isProcessing}
                 >
                   Log in
@@ -199,7 +170,11 @@ export default function AuthModal({
                 <button
                   type="button"
                   className={`auth-mode-button${isSignup ? " is-active" : ""}`}
-                  onClick={() => setMode(FORM_MODES.signup)}
+                  onClick={() => {
+                    setMode(FORM_MODES.signup);
+                    setSignupStep("email");
+                    setLocalError("");
+                  }}
                   disabled={isProcessing}
                 >
                   Create account
@@ -208,26 +183,40 @@ export default function AuthModal({
             ) : null}
             <h2>{formTitle}</h2>
             {formSubtitle ? <p className="auth-modal-subtitle">{formSubtitle}</p> : null}
-            <form className="auth-form" onSubmit={handleSubmit}>
-              {isSignupPage && signupStep === "password" ? (
-                <div className="auth-step-header">
+            {isSignup && signupStep === "sent" ? (
+              <div className="auth-form">
+                <div className="auth-email-summary">
+                  <span className="auth-field-label">Email</span>
+                  <span>{formState.email}</span>
+                </div>
+                <p className="auth-step-text">
+                  We sent a verification link and code to your inbox. Click the link or paste the
+                  code on the verification page to continue.
+                </p>
+                {displayError ? <p className="auth-local-error">{displayError}</p> : null}
+                <div className="auth-modal-actions">
+                  <a className="neomorphus-button" href="/verify">
+                    Enter verification code
+                  </a>
                   <button
                     type="button"
-                    className="auth-step-back"
-                    onClick={() => {
-                      setSignupStep("email");
+                    className="neomorphus-button secondary"
+                    onClick={async () => {
                       setLocalError("");
+                      try {
+                        await onEmailSignup({ email: formState.email.trim() });
+                      } catch {
+                        // Errors surfaced via auth context.
+                      }
                     }}
-                    aria-label="Back to email"
+                    disabled={isProcessing}
                   >
-                    ←
+                    {isProcessing ? "Sending..." : "Resend email"}
                   </button>
-                  <div className="auth-step-text">
-                    <span className="auth-step-title">Create a password</span>
-                  </div>
                 </div>
-              ) : null}
-              {!isSignupPage || signupStep === "email" ? (
+              </div>
+            ) : (
+              <form className="auth-form" onSubmit={handleSubmit}>
                 <label className="auth-field">
                   <span className="auth-field-label">{resolvedEmailLabel}</span>
                   <input
@@ -241,62 +230,31 @@ export default function AuthModal({
                     required
                   />
                 </label>
-              ) : (
-                <div className="auth-email-summary">
-                  <span className="auth-field-label">Email</span>
-                  <span>{formState.email}</span>
-                </div>
-              )}
-              {(!isSignup || (isSignupPage && signupStep === "password")) ? (
-                <label className="auth-field">
-                  <span className="auth-field-label">Password</span>
-                  <input
-                    type="password"
-                    name="password"
-                    value={formState.password}
-                    onChange={handleFieldChange}
-                    placeholder="••••••••"
-                    autoComplete={isSignup ? "new-password" : "current-password"}
-                    disabled={isProcessing}
-                    required
-                  />
-                </label>
-              ) : null}
-              {isSignupPage && signupStep === "password" ? (
-                <div className="auth-form-row">
+                {!isSignup ? (
                   <label className="auth-field">
-                    <span className="auth-field-label">First name</span>
+                    <span className="auth-field-label">Password</span>
                     <input
-                      type="text"
-                      name="firstName"
-                      value={formState.firstName}
+                      type="password"
+                      name="password"
+                      value={formState.password}
                       onChange={handleFieldChange}
-                      placeholder="Ada"
-                      autoComplete="given-name"
+                      placeholder="••••••••"
+                      autoComplete="current-password"
                       disabled={isProcessing}
                       required
                     />
                   </label>
-                  <label className="auth-field">
-                    <span className="auth-field-label">Last name</span>
-                    <input
-                      type="text"
-                      name="lastName"
-                      value={formState.lastName}
-                      onChange={handleFieldChange}
-                      placeholder="Lovelace"
-                      autoComplete="family-name"
-                      disabled={isProcessing}
-                      required
-                    />
-                  </label>
-                </div>
-              ) : null}
-              {displayError ? <p className="auth-local-error">{displayError}</p> : null}
-              <button type="submit" className="neomorphus-button auth-submit" disabled={isProcessing}>
-                {isProcessing ? "Working..." : resolvedPrimaryLabel}
-              </button>
-            </form>
+                ) : null}
+                {displayError ? <p className="auth-local-error">{displayError}</p> : null}
+                <button
+                  type="submit"
+                  className="neomorphus-button auth-submit"
+                  disabled={isProcessing}
+                >
+                  {isProcessing ? "Working..." : resolvedPrimaryLabel}
+                </button>
+              </form>
+            )}
             <div className="auth-divider-line" />
             <div className="auth-divider">
               <span>{dividerLabel}</span>
