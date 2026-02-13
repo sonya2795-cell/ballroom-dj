@@ -41,6 +41,20 @@ textarea {
   margin-top: 0;
 }
 
+.app-root--preview {
+  padding-bottom: calc(4rem + var(--preview-banner-height, 8rem) + 2rem);
+  justify-content: flex-start;
+}
+
+.app-shell--preview {
+  height: auto;
+  overflow: visible;
+}
+
+.app-shell-columns--preview {
+  height: auto;
+}
+
 .app-shell {
   width: calc(0.99 * (100% - 100px));
   max-width: calc(0.99 * (80rem - 100px));
@@ -109,6 +123,14 @@ textarea {
   padding-left: 0.5rem;
   padding-right: 0.5rem;
   pointer-events: none;
+}
+
+.app-shell-footer--preview {
+  padding-bottom: 65px;
+}
+
+.preview-pad-65 {
+  padding-bottom: 65px;
 }
 
 .app-shell-footer button,
@@ -878,6 +900,30 @@ textarea {
 
 .round-queue-item--upcoming {
   background-color: rgba(255, 255, 255, 0.04);
+}
+
+.round-queue-empty {
+  margin: 0;
+  color: #b5bac6;
+}
+
+.loading-ellipsis {
+  display: inline-block;
+  overflow: hidden;
+  vertical-align: bottom;
+}
+
+.loading-ellipsis::after {
+  content: "...";
+  display: inline-block;
+  width: 0;
+  animation: loading-ellipsis 1.1s steps(4, end) infinite;
+}
+
+@keyframes loading-ellipsis {
+  to {
+    width: 3ch;
+  }
 }
 
 .round-reload-button {

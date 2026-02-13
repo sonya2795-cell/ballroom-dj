@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { Routes, Route, useNavigate } from "react-router-dom";
+import { useState, useEffect, useRef, useCallback, useMemo, useLayoutEffect } from "react";
+import { Routes, Route, useLocation, useNavigate } from "react-router-dom";
 import AuthModal from "./components/AuthModal.jsx";
 import FeedbackModal from "./components/FeedbackModal.jsx";
 import { useAuth } from "./context/AuthContext.jsx";
@@ -51,7 +51,11 @@ const MODE_OPTIONS = [
   { id: "practice", label: "Practice" },
 ];
 
+const PLAYER_PREFS_STORAGE_KEY = "ballroom-dj.player-prefs";
+const DEFAULT_PLAYER_MODE = MODE_OPTIONS[0]?.id ?? "round";
 const ENABLED_STYLE_IDS = new Set(["latin", "ballroom"]);
+const STYLE_ID_SET = new Set(STYLE_OPTIONS.map((style) => style.id));
+const MODE_ID_SET = new Set(MODE_OPTIONS.map((mode) => mode.id));
 const PASO_CRASH_BUTTON_LABELS = {
   crash1: "1st crash",
   crash2: "2nd crash",
@@ -71,6 +75,51 @@ const DANCE_SHORT_LABELS = {
   "paso doble": "PD",
   jive: "J",
 };
+
+function getPlayerPrefsKey(userId) {
+  return `${PLAYER_PREFS_STORAGE_KEY}:${userId ?? "anon"}`;
+}
+
+function normalizeStyleId(styleId) {
+  return STYLE_ID_SET.has(styleId) ? styleId : null;
+}
+
+function normalizeModeId(modeId) {
+  return MODE_ID_SET.has(modeId) ? modeId : null;
+}
+
+function getDefaultStyleId() {
+  const enabledStyle = STYLE_OPTIONS.find((style) => ENABLED_STYLE_IDS.has(style.id));
+  return enabledStyle?.id ?? STYLE_OPTIONS[0]?.id ?? null;
+}
+
+function readPlayerPrefs(storageKey) {
+  try {
+    if (typeof window === "undefined" || !window.localStorage) {
+      return null;
+    }
+    const raw = window.localStorage.getItem(storageKey);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    const selectedStyle = normalizeStyleId(data?.selectedStyle ?? null);
+    const selectedMode = normalizeModeId(data?.selectedMode ?? null);
+    if (!selectedStyle && !selectedMode) return null;
+    return { selectedStyle, selectedMode };
+  } catch (err) {
+    return null;
+  }
+}
+
+function writePlayerPrefs(storageKey, prefs) {
+  try {
+    if (typeof window === "undefined" || !window.localStorage) {
+      return;
+    }
+    window.localStorage.setItem(storageKey, JSON.stringify(prefs));
+  } catch (err) {
+    // Storage is best-effort.
+  }
+}
 
 const SONG_MIN_SECONDS = 60;
 const SONG_MAX_SECONDS = 180;
@@ -266,6 +315,7 @@ function PlayerApp() {
     logout,
   } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authModalMode, setAuthModalMode] = useState("signin");
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
@@ -280,6 +330,7 @@ function PlayerApp() {
   const [selectedMode, setSelectedMode] = useState(null);
   const [showWelcomeModal, setShowWelcomeModal] = useState(true);
   const [showModeModal, setShowModeModal] = useState(false);
+  const [isRoundLoading, setIsRoundLoading] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isSettingsDragging, setIsSettingsDragging] = useState(false);
   const [settingsDragOffset, setSettingsDragOffset] = useState(0);
@@ -291,6 +342,9 @@ function PlayerApp() {
   const settingsPanelRef = useRef(null);
   const settingsOnboardingHandledRef = useRef(false);
   const settingsOnboardingSessionRef = useRef(false);
+  const prefsHydrationKeyRef = useRef(null);
+  const autoRoundKeyRef = useRef(null);
+  const previewBannerRef = useRef(null);
   const [settingsClosedOffset, setSettingsClosedOffset] = useState(null);
   const settingsOpenDragStartYRef = useRef(0);
   const settingsOpenPointerIdRef = useRef(null);
@@ -420,6 +474,46 @@ function PlayerApp() {
       setIsSettingsOpen(false);
     }
   }, [isNarrowLayout, isSettingsOpen]);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      return;
+    }
+    const storageKey = getPlayerPrefsKey(user?.uid);
+    const signature = `${storageKey}:auth`;
+    if (prefsHydrationKeyRef.current === signature) {
+      return;
+    }
+    prefsHydrationKeyRef.current = signature;
+
+    const storedPrefs = readPlayerPrefs(storageKey);
+    const fallbackStyle = storedPrefs?.selectedStyle ?? getDefaultStyleId();
+    const fallbackMode = storedPrefs?.selectedMode ?? DEFAULT_PLAYER_MODE;
+
+    if (storedPrefs?.selectedStyle && storedPrefs.selectedStyle !== selectedStyle) {
+      setSelectedStyle(storedPrefs.selectedStyle);
+    }
+    if (storedPrefs?.selectedMode && storedPrefs.selectedMode !== selectedMode) {
+      setSelectedMode(storedPrefs.selectedMode);
+    }
+    if (!storedPrefs?.selectedStyle && fallbackStyle) {
+      setSelectedStyle(fallbackStyle);
+    }
+    if (!storedPrefs?.selectedMode && fallbackMode) {
+      setSelectedMode(fallbackMode);
+    }
+    setShowWelcomeModal(false);
+    setShowModeModal(false);
+  }, [isAuthenticated, selectedMode, selectedStyle, user?.uid]);
+
+  useEffect(() => {
+    if (!selectedStyle && !selectedMode) {
+      return;
+    }
+    const payload = { selectedStyle, selectedMode };
+    writePlayerPrefs(getPlayerPrefsKey(user?.uid), payload);
+    // Only persist per-user prefs; keep unauthenticated users on the welcome flow.
+  }, [selectedMode, selectedStyle, user?.uid]);
 
   useEffect(() => {
     if (!isSettingsOpen) {
@@ -1059,15 +1153,18 @@ function PlayerApp() {
 
       if (!style) {
         console.warn("No style selected yet.");
+        setIsRoundLoading(false);
         return;
       }
 
       if (!ENABLED_STYLE_IDS.has(style)) {
         console.warn(`Round generation for ${style} not wired up yet.`);
+        setIsRoundLoading(false);
         return;
       }
 
       try {
+        setIsRoundLoading(true);
         console.debug("[round] fetching round", style);
         const res = await fetchWithOrigin(`/api/round?style=${encodeURIComponent(style)}`, {
           credentials: "include",
@@ -1082,6 +1179,7 @@ function PlayerApp() {
           pendingRoundStyleRef.current = style;
           authPromptReasonRef.current = "round-generation";
           setRoundAuthBlocked(true);
+          setIsRoundLoading(false);
           return;
         }
 
@@ -1104,8 +1202,10 @@ function PlayerApp() {
         setCurrentTime(0);
         setDuration(0);
         advancingRef.current = false;
+        setIsRoundLoading(false);
       } catch (error) {
         console.error("Error fetching round:", error);
+        setIsRoundLoading(false);
       }
     },
     [clearPlayTimeout, resetBreakState, roundSource.length, selectedStyle]
@@ -1129,6 +1229,60 @@ function PlayerApp() {
       generateRound(styleToGenerate);
     }
   }, [clearAuthPromptTimeout, generateRound, isAuthenticated, user?.uid]);
+
+  useLayoutEffect(() => {
+    if (!isUnauthenticated) {
+      document.documentElement.style.removeProperty("--preview-banner-height");
+      return;
+    }
+
+    const banner = previewBannerRef.current;
+    if (!banner) {
+      return;
+    }
+
+    const updateBannerHeight = () => {
+      const height = banner.getBoundingClientRect().height || 0;
+      document.documentElement.style.setProperty(
+        "--preview-banner-height",
+        `${Math.ceil(height)}px`,
+      );
+    };
+
+    updateBannerHeight();
+
+    let observer = null;
+    if (typeof ResizeObserver !== "undefined") {
+      observer = new ResizeObserver(() => updateBannerHeight());
+      observer.observe(banner);
+    } else {
+      window.addEventListener("resize", updateBannerHeight);
+    }
+
+    return () => {
+      if (observer) {
+        observer.disconnect();
+      } else {
+        window.removeEventListener("resize", updateBannerHeight);
+      }
+    };
+  }, [isUnauthenticated]);
+
+  useEffect(() => {
+    if (selectedMode !== "round") {
+      return;
+    }
+    if (!selectedStyle || !ENABLED_STYLE_IDS.has(selectedStyle)) {
+      return;
+    }
+    const navigationKey = location.key ?? location.pathname;
+    if (autoRoundKeyRef.current === navigationKey) {
+      return;
+    }
+    autoRoundKeyRef.current = navigationKey;
+    setIsRoundLoading(true);
+    generateRound(selectedStyle);
+  }, [generateRound, location.key, location.pathname, selectedMode, selectedStyle]);
 
   const handleEnded = () => {
     clearPlayTimeout();
@@ -1271,6 +1425,7 @@ function PlayerApp() {
     }
 
     console.debug("[round-button] click accepted", state);
+    setIsRoundLoading(true);
     generateRound(state.selectedStyle);
   }, [generateRound, roundAuthBlocked, selectedStyle]);
 
@@ -2316,6 +2471,10 @@ function PlayerApp() {
     if (settingsOnboardingHandledRef.current) {
       return;
     }
+    if (isAuthenticated) {
+      settingsOnboardingHandledRef.current = true;
+      return;
+    }
     if (!selectedStyle || selectedMode === null) {
       return;
     }
@@ -3065,7 +3224,9 @@ function PlayerApp() {
           </div>
         )}
         {!isPasoPracticeContext && isPracticeMode && (
-          <div>
+          <div
+            className={`practice-song-length-block${isUnauthenticated ? " preview-pad-65" : ""}`}
+          >
             <div className="slider-label-row">
               <label htmlFor="song-duration-slider">Song Length</label>
               <span className="slider-value">
@@ -3134,7 +3295,9 @@ function PlayerApp() {
           </div>
         )}
         {selectedMode !== "practice" && (
-          <div className="heat-controls">
+          <div
+            className={`heat-controls${isUnauthenticated ? " preview-pad-65" : ""}`}
+          >
             <div className="heat-mode-button-group">
               {ROUND_HEAT_OPTIONS.map((option) => (
                 <button
@@ -3676,8 +3839,8 @@ const roundTransportControls =
         </div>
       </header>
 
-      <div className="app-root">
-        <div className="app-shell">
+      <div className={`app-root${isUnauthenticated ? " app-root--preview" : ""}`}>
+        <div className={`app-shell${isUnauthenticated ? " app-shell--preview" : ""}`}>
           <div className="style-button-group">
             {STYLE_OPTIONS.map((style) => (
               <button
@@ -3717,7 +3880,7 @@ const roundTransportControls =
           {isNarrowLayout ? practiceDancePanel : null}
 
           <div className="app-shell-body">
-            <div className="app-shell-columns">
+          <div className={`app-shell-columns${isUnauthenticated ? " app-shell-columns--preview" : ""}`}>
               {!isNarrowLayout && (
                 <div className="app-shell-column app-shell-column--left">
                   {selectedStyle && (
@@ -3855,17 +4018,25 @@ const roundTransportControls =
                             ))}
                           </ul>
                         ) : (
-                          <p style={{ color: "#b5bac6", margin: 0 }}>
-                            Generate a round to see the queue.
+                          <p className="round-queue-empty">
+                            {isRoundLoading ? (
+                              <>
+                                Loading<span className="loading-ellipsis" aria-hidden="true" />
+                              </>
+                            ) : (
+                              "Generate a round to see the queue."
+                            )}
                           </p>
                         )}
                       </div>
                       <button
                         onClick={handleRoundReloadClick}
-                        disabled={!selectedStyle || !ENABLED_STYLE_IDS.has(selectedStyle)}
+                        disabled={
+                          isRoundLoading || !selectedStyle || !ENABLED_STYLE_IDS.has(selectedStyle)
+                        }
                         className="neomorphus-button round-reload-button"
                       >
-                        New Round
+                        {isRoundLoading ? "Loading..." : "New Round"}
                       </button>
                     </div>
                   )
@@ -3971,13 +4142,13 @@ const roundTransportControls =
             </div>
           )}
 
-          <div className="app-shell-footer">
+          <div className={`app-shell-footer${isUnauthenticated ? " app-shell-footer--preview" : ""}`}>
             {selectedMode === "practice" ? practiceTransportControls : roundTransportControls}
           </div>
         </div>
       </div>
       {isUnauthenticated ? (
-        <div className="preview-banner">
+        <div className="preview-banner" ref={previewBannerRef}>
           <div className="preview-banner-content">
             <div>
               <div className="preview-banner-title">Preview of Muzon App</div>
