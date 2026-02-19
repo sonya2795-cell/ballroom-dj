@@ -1618,6 +1618,11 @@ textarea {
   border-radius: 9999px;
 }
 
+.auth-resend {
+  margin-top: 0.75rem;
+  color: #25ed27;
+}
+
 .auth-prompt-actions .neomorphus-button {
   border-radius: 9999px;
 }
@@ -1637,6 +1642,12 @@ textarea {
 .auth-local-error {
   margin: 0;
   color: #ffb3b3;
+  font-size: 0.85rem;
+}
+
+.auth-local-success {
+  margin: 0;
+  color: #9ff0a3;
   font-size: 0.85rem;
 }
 
@@ -1844,6 +1855,12 @@ textarea {
   width: 260px;
   max-width: 100%;
   margin: 0 auto;
+}
+
+.auth-page .auth-submit.auth-resend {
+  background: #2b2e35;
+  color: #25ed27;
+  box-shadow: inset 3px 3px 5px #1f2126, inset -3px -3px 5px #41454e;
 }
 
 .auth-page .auth-submit:disabled {

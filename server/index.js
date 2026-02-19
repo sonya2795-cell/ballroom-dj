@@ -28,6 +28,8 @@ const EMAIL_VERIFICATION_TTL_MS = 1000 * 60 * 10; // 10 minutes
 const VERIFICATION_SESSION_TTL_MS = 1000 * 60 * 10; // 10 minutes
 const EMAIL_VERIFICATION_RESEND_COOLDOWN_MS = 1000 * 60; // 60 seconds
 const PASSWORD_MIN_LENGTH = 6;
+const VERIFICATION_TOKEN_LENGTH = 5;
+const VERIFICATION_TOKEN_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 const DEFAULT_FEEDBACK_MAX_FILES = 3;
 const DEFAULT_FEEDBACK_MAX_FILE_SIZE_BYTES = 8 * 1024 * 1024; // 8MB
 const FEEDBACK_DESCRIPTION_MAX_LENGTH = 2000;
@@ -502,6 +504,24 @@ function hashToken(value) {
   return crypto.createHash("sha256").update(value).digest("hex");
 }
 
+function normalizeVerificationToken(value) {
+  if (typeof value !== "string") return "";
+  return value.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+function isValidVerificationToken(value) {
+  return value.length === VERIFICATION_TOKEN_LENGTH && /^[A-Z0-9]+$/.test(value);
+}
+
+function generateVerificationToken() {
+  const bytes = crypto.randomBytes(VERIFICATION_TOKEN_LENGTH);
+  let token = "";
+  for (let i = 0; i < VERIFICATION_TOKEN_LENGTH; i += 1) {
+    token += VERIFICATION_TOKEN_ALPHABET[bytes[i] % VERIFICATION_TOKEN_ALPHABET.length];
+  }
+  return token;
+}
+
 function timingSafeEquals(a, b) {
   const aBuf = Buffer.from(a || "");
   const bBuf = Buffer.from(b || "");
@@ -663,7 +683,7 @@ app.post("/auth/email/start", async (req, res) => {
     return;
   }
 
-  const rawToken = crypto.randomBytes(32).toString("base64url");
+  const rawToken = generateVerificationToken();
   const tokenHash = hashToken(rawToken);
   const expiresAt = admin.firestore.Timestamp.fromDate(
     new Date(Date.now() + EMAIL_VERIFICATION_TTL_MS)
@@ -730,7 +750,7 @@ async function createVerificationSession({ email, emailHash, tokenHash, req }) {
 }
 
 async function consumeVerificationToken({ rawToken, req }) {
-  if (!rawToken) {
+  if (!rawToken || !isValidVerificationToken(rawToken)) {
     return { ok: false, error: "invalid" };
   }
 
@@ -806,7 +826,7 @@ async function consumeVerificationToken({ rawToken, req }) {
 }
 
 app.get("/auth/email/verify", async (req, res) => {
-  const rawToken = typeof req.query.token === "string" ? req.query.token : "";
+  const rawToken = normalizeVerificationToken(req.query.token);
 
   try {
     const result = await consumeVerificationToken({ rawToken, req });
@@ -829,7 +849,7 @@ app.get("/auth/email/verify", async (req, res) => {
 });
 
 app.post("/auth/email/verify", async (req, res) => {
-  const rawToken = sanitizeText(req.body?.token);
+  const rawToken = normalizeVerificationToken(req.body?.token);
   try {
     const result = await consumeVerificationToken({ rawToken, req });
     if (!result.ok) {

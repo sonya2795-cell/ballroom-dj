@@ -103,6 +103,7 @@ export default function AuthModal({
     try {
       if (isSignup) {
         await onEmailSignup({ email: trimmedEmail });
+        sessionStorage.setItem("verificationEmail", trimmedEmail);
         setSignupStep("sent");
       } else {
         await onEmailLogin({
@@ -205,6 +206,7 @@ export default function AuthModal({
                       setLocalError("");
                       try {
                         await onEmailSignup({ email: formState.email.trim() });
+                        sessionStorage.setItem("verificationEmail", formState.email.trim());
                       } catch {
                         // Errors surfaced via auth context.
                       }

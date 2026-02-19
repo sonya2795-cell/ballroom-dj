@@ -20,7 +20,9 @@ export default function VerifyEmailPage() {
   const navigate = useNavigate();
   const [token, setToken] = useState("");
   const [localError, setLocalError] = useState("");
+  const [localNotice, setLocalNotice] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isResending, setIsResending] = useState(false);
 
   useEffect(() => {
     const errorCode = searchParams.get("error");
@@ -28,6 +30,42 @@ export default function VerifyEmailPage() {
       setLocalError(getErrorMessage(errorCode));
     }
   }, [searchParams]);
+
+  const handleResend = async () => {
+    if (isResending) return;
+    const email = sessionStorage.getItem("verificationEmail") || "";
+    if (!email) {
+      navigate("/signup");
+      return;
+    }
+
+    setIsResending(true);
+    setLocalError("");
+    setLocalNotice("");
+
+    try {
+      const response = await fetchWithOrigin("/auth/email/start", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({ email }),
+      });
+      const payload = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        setLocalError(payload?.error || ERROR_MESSAGES.error);
+        return;
+      }
+
+      setLocalNotice(`We sent a new code to ${email}.`);
+    } catch (err) {
+      setLocalError(ERROR_MESSAGES.error);
+    } finally {
+      setIsResending(false);
+    }
+  };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -40,6 +78,7 @@ export default function VerifyEmailPage() {
 
     setIsProcessing(true);
     setLocalError("");
+    setLocalNotice("");
 
     try {
       const response = await fetchWithOrigin("/auth/email/verify", {
@@ -89,16 +128,32 @@ export default function VerifyEmailPage() {
                 type="text"
                 name="token"
                 value={token}
-                onChange={(event) => setToken(event.target.value)}
+                onChange={(event) => {
+                  const sanitized = event.target.value
+                    .toUpperCase()
+                    .replace(/[^A-Z0-9]/g, "")
+                    .slice(0, 5);
+                  setToken(sanitized);
+                }}
                 placeholder="Paste code"
                 autoComplete="one-time-code"
+                maxLength={5}
                 disabled={isProcessing}
                 required
               />
             </label>
             {localError ? <p className="auth-local-error">{localError}</p> : null}
+            {localNotice ? <p className="auth-local-success">{localNotice}</p> : null}
             <button type="submit" className="neomorphus-button auth-submit" disabled={isProcessing}>
               {isProcessing ? "Verifying..." : "Continue"}
+            </button>
+            <button
+              type="button"
+              className="neomorphus-button secondary auth-submit auth-resend"
+              onClick={handleResend}
+              disabled={isResending}
+            >
+              {isResending ? "Sending..." : "Send New Code"}
             </button>
           </form>
         </div>
