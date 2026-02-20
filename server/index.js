@@ -29,7 +29,7 @@ const VERIFICATION_SESSION_TTL_MS = 1000 * 60 * 10; // 10 minutes
 const EMAIL_VERIFICATION_RESEND_COOLDOWN_MS = 1000 * 60; // 60 seconds
 const PASSWORD_MIN_LENGTH = 6;
 const VERIFICATION_TOKEN_LENGTH = 5;
-const VERIFICATION_TOKEN_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+const VERIFICATION_TOKEN_ALPHABET = "0123456789";
 const DEFAULT_FEEDBACK_MAX_FILES = 3;
 const DEFAULT_FEEDBACK_MAX_FILE_SIZE_BYTES = 8 * 1024 * 1024; // 8MB
 const FEEDBACK_DESCRIPTION_MAX_LENGTH = 2000;
@@ -506,11 +506,11 @@ function hashToken(value) {
 
 function normalizeVerificationToken(value) {
   if (typeof value !== "string") return "";
-  return value.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+  return value.trim().replace(/[^0-9]/g, "");
 }
 
 function isValidVerificationToken(value) {
-  return value.length === VERIFICATION_TOKEN_LENGTH && /^[A-Z0-9]+$/.test(value);
+  return value.length === VERIFICATION_TOKEN_LENGTH && /^[0-9]+$/.test(value);
 }
 
 function generateVerificationToken() {

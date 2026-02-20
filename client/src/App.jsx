@@ -22,7 +22,8 @@ import {
 const BREAK_MIN_SECONDS = 5;
 const BREAK_MAX_SECONDS = 30;
 const DEFAULT_BREAK_SECONDS = BREAK_MIN_SECONDS;
-const ROUND_FADE_OUT_SECONDS = 5;
+const ROUND_FADE_OUT_SECONDS = 4;
+const PRACTICE_FADE_OUT_SECONDS = 4;
 const ROUND_FADE_INTERVAL_MS = 50;
 
 const ROUND_HEAT_OPTIONS = [
@@ -236,6 +237,10 @@ function buildExpandedRound(songs, repeatCount) {
 function msToSeconds(ms) {
   if (typeof ms !== "number" || Number.isNaN(ms)) return null;
   return ms / 1000;
+}
+
+function clamp(value, min = 0, max = 1) {
+  return Math.min(Math.max(value, min), max);
 }
 
 function getClipStartSeconds(song) {
@@ -754,6 +759,7 @@ function PlayerApp() {
   const playTimeoutRef = useRef(null);
   const fadeTimeoutRef = useRef(null);
   const fadeIntervalRef = useRef(null);
+  const practiceFadeIntervalRef = useRef(null);
   const breakIntervalRef = useRef(null);
   const breakCountdownRef = useRef(null);
   const activationAudioRef = useRef(null);
@@ -990,6 +996,10 @@ function PlayerApp() {
       practiceAudioRef.current.currentTime = 0;
     }
 
+    if (practiceFadeIntervalRef.current) {
+      clearInterval(practiceFadeIntervalRef.current);
+      practiceFadeIntervalRef.current = null;
+    }
     setPracticePlaylist(null);
     setPracticeTrackIndex(0);
     setPracticeIsPlaying(false);
@@ -1310,7 +1320,42 @@ function PlayerApp() {
   };
 
   const handleTimeUpdate = (event) => {
-    setCurrentTime(event.target.currentTime || 0);
+    const currentSeconds = event.target.currentTime || 0;
+    setCurrentTime(currentSeconds);
+
+    if (breakTimeLeft !== null) {
+      return;
+    }
+
+    if (!currentSong) {
+      return;
+    }
+
+    const durationLimit = getRoundDurationLimitSeconds(currentSong);
+    if (!Number.isFinite(durationLimit) || durationLimit <= 0) {
+      return;
+    }
+
+    const remainingSeconds = Math.max(durationLimit - currentSeconds, 0);
+    if (
+      remainingSeconds <= ROUND_FADE_OUT_SECONDS &&
+      remainingSeconds > 0 &&
+      !fadeIntervalRef.current
+    ) {
+      startFadeOut(remainingSeconds * 1000);
+    }
+
+    if (currentSeconds >= durationLimit - 0.05 && !advancingRef.current) {
+      advancingRef.current = true;
+      clearPlayTimeout();
+      clearFadeTimers();
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+      setIsPlaying(false);
+      startBreakThenNext();
+      advancingRef.current = false;
+    }
   };
 
   const handleLoadedMetadata = (event) => {
@@ -2267,6 +2312,9 @@ function PlayerApp() {
     if (!practicePlaylist?.tracks?.length) {
       return;
     }
+    if (practiceIsPlaying) {
+      return;
+    }
 
     let isCancelled = false;
 
@@ -2324,6 +2372,7 @@ function PlayerApp() {
     hydrateTrackDurations,
     isPracticeFullSongSelection,
     isPracticeTrackAllowed,
+    practiceIsPlaying,
     practicePlaylist,
     selectedMode,
     songDurationSeconds,
@@ -2506,6 +2555,10 @@ function PlayerApp() {
       return;
     }
     practiceAdvancingRef.current = true;
+    if (practiceFadeIntervalRef.current) {
+      clearInterval(practiceFadeIntervalRef.current);
+      practiceFadeIntervalRef.current = null;
+    }
     const tracksLength = practicePlaylist?.tracks?.length ?? 0;
     console.debug("[practice] track completion", {
       tracksLength,
@@ -2577,9 +2630,41 @@ function PlayerApp() {
       currentSeconds >= crashSeconds - 0.05;
     const durationLimit = shouldRespectPracticeCutoffs
       ? getPracticeDurationLimitSeconds(track)
-      : null;
+      : Math.max((audio.duration || 0) - clipStartSeconds, 0);
     const reachedLimit =
       durationLimit != null && elapsedSeconds >= durationLimit - 0.05;
+
+    if (Number.isFinite(durationLimit) && durationLimit > 0) {
+      const remainingSeconds = Math.max(durationLimit - elapsedSeconds, 0);
+      if (remainingSeconds <= PRACTICE_FADE_OUT_SECONDS) {
+        if (!practiceFadeIntervalRef.current) {
+          const startVolume = audio.volume ?? 1;
+          const totalMs = Math.max(remainingSeconds * 1000, 0);
+          if (totalMs === 0) {
+            audio.volume = 0;
+          } else {
+            const startedAt = Date.now();
+            practiceFadeIntervalRef.current = setInterval(() => {
+              const elapsed = Date.now() - startedAt;
+              const progress = Math.min(elapsed / totalMs, 1);
+              audio.volume = Math.max(startVolume * (1 - progress), 0);
+              if (progress >= 1) {
+                clearInterval(practiceFadeIntervalRef.current);
+                practiceFadeIntervalRef.current = null;
+              }
+            }, ROUND_FADE_INTERVAL_MS);
+          }
+        }
+      } else {
+        if (practiceFadeIntervalRef.current) {
+          clearInterval(practiceFadeIntervalRef.current);
+          practiceFadeIntervalRef.current = null;
+        }
+        if (audio.volume < 1) {
+          audio.volume = 1;
+        }
+      }
+    }
 
     if (reachedClip || reachedCrash || reachedLimit) {
       console.debug("[practice] reached cutoff", {
@@ -2600,6 +2685,11 @@ function PlayerApp() {
   const handlePracticeLoadedMetadata = (event) => {
     const audio = event.target;
     applyPlaybackRate(audio, practicePlaybackRate);
+    audio.volume = 1.0;
+    if (practiceFadeIntervalRef.current) {
+      clearInterval(practiceFadeIntervalRef.current);
+      practiceFadeIntervalRef.current = null;
+    }
     const track = currentPracticeTrack;
     if (!track) {
       setPracticeDuration(audio.duration || 0);
@@ -2689,6 +2779,11 @@ function PlayerApp() {
 
     if (audio.paused) {
       applyPlaybackRate(audio, practicePlaybackRate);
+      audio.volume = 1.0;
+      if (practiceFadeIntervalRef.current) {
+        clearInterval(practiceFadeIntervalRef.current);
+        practiceFadeIntervalRef.current = null;
+      }
       audio
         .play()
         .catch((err) => console.error("Practice play error:", err));
@@ -2789,6 +2884,16 @@ function PlayerApp() {
     practiceDuration && Number.isFinite(practiceDuration) && practiceDuration > 0
       ? practiceDuration
       : 0;
+  const practiceDurationLimitSeconds =
+    currentPracticeTrack && !isPracticeFullSongSelection
+      ? getPracticeDurationLimitSeconds(currentPracticeTrack, songDurationSeconds)
+      : null;
+  if (practiceDurationLimitSeconds != null && practiceDurationLimitSeconds > 0) {
+    practiceEffectiveDuration =
+      practiceEffectiveDuration > 0
+        ? Math.min(practiceEffectiveDuration, practiceDurationLimitSeconds)
+        : practiceDurationLimitSeconds;
+  }
   if (practiceCrashDurationSeconds != null) {
     practiceEffectiveDuration =
       practiceEffectiveDuration > 0
@@ -2890,6 +2995,29 @@ function PlayerApp() {
       </div>
     ) : null;
   const practiceQueueHasTracks = practicePlaylist?.tracks?.length ?? 0;
+  const handlePracticeQueueSelect = useCallback(
+    (targetIndex) => {
+      if (!Number.isInteger(targetIndex) || targetIndex < 0) return;
+      const tracks = practicePlaylist?.tracks ?? [];
+      if (targetIndex >= tracks.length) return;
+
+      if (practiceFadeIntervalRef.current) {
+        clearInterval(practiceFadeIntervalRef.current);
+        practiceFadeIntervalRef.current = null;
+      }
+
+      setPracticeIsPlaying(false);
+      setPracticeCurrentTime(0);
+      setPracticeDuration(0);
+      setPracticeTrackIndex(targetIndex);
+
+      if (practiceAudioRef.current) {
+        practiceAudioRef.current.pause();
+        practiceAudioRef.current.currentTime = 0;
+      }
+    },
+    [practicePlaylist]
+  );
   const practiceQueueContent =
     practiceQueueTracks.length
       ? (
@@ -2905,24 +3033,31 @@ function PlayerApp() {
                   key={track.id ?? track.file ?? idx}
                   className={`round-queue-item${isActive ? " round-queue-item--current" : ""}`}
                 >
-                  <div
-                    className={`round-queue-item-art${
-                      badge.isFallback ? " round-queue-item-art--fallback" : ""
-                    }`}
-                    aria-hidden="true"
-                    title={badge.isFallback ? "Unknown dance" : undefined}
+                  <button
+                    type="button"
+                    className="round-queue-item-button"
+                    onClick={() => handlePracticeQueueSelect(idx)}
+                    aria-label={`Play ${getTrackTitle(track)}`}
                   >
-                    {badge.label}
-                  </div>
-                  <div className="round-queue-item-text">
                     <div
-                      className="round-queue-item-title"
-                      style={{ color: isActive ? HIGHLIGHT_COLOR : undefined }}
+                      className={`round-queue-item-art${
+                        badge.isFallback ? " round-queue-item-art--fallback" : ""
+                      }`}
+                      aria-hidden="true"
+                      title={badge.isFallback ? "Unknown dance" : undefined}
                     >
-                      {getTrackTitle(track)}
+                      {badge.label}
                     </div>
-                    <div className="round-queue-item-artist">{getTrackArtist(track)}</div>
-                  </div>
+                    <div className="round-queue-item-text">
+                      <div
+                        className="round-queue-item-title"
+                        style={{ color: isActive ? HIGHLIGHT_COLOR : undefined }}
+                      >
+                        {getTrackTitle(track)}
+                      </div>
+                      <div className="round-queue-item-artist">{getTrackArtist(track)}</div>
+                    </div>
+                  </button>
                 </li>
               );
             })}
@@ -3028,6 +3163,97 @@ function PlayerApp() {
   const totalTimeLabel = showBreakProgress
     ? formatTime(breakTotalSeconds ?? 0)
     : formatTime(effectiveDuration);
+  const canScrubRound =
+    !showBreakProgress && currentIndex !== null && Boolean(currentSong?.file) && effectiveDuration > 0;
+  const canScrubPractice = Boolean(currentPracticeTrack?.file) && practiceEffectiveDuration > 0;
+
+  const seekRoundTo = useCallback(
+    (nextTimeSeconds) => {
+      if (!canScrubRound) return;
+      const audio = audioRef.current;
+      if (!audio) return;
+      clearFadeTimers({ resetVolume: true });
+      const clampedTime = clamp(nextTimeSeconds, 0, effectiveDuration);
+      try {
+        audio.currentTime = clampedTime;
+      } catch (err) {
+        console.warn("Failed to scrub round audio", err);
+      }
+      setCurrentTime(clampedTime);
+      if (isPlaying && currentSong) {
+        schedulePlayTimeout(getRoundDurationLimitSeconds(currentSong));
+      }
+    },
+    [
+      canScrubRound,
+      clearFadeTimers,
+      currentSong,
+      effectiveDuration,
+      getRoundDurationLimitSeconds,
+      isPlaying,
+      schedulePlayTimeout,
+    ]
+  );
+
+  const seekPracticeTo = useCallback(
+    (nextTimeSeconds) => {
+      if (!canScrubPractice) return;
+      const audio = practiceAudioRef.current;
+      if (!audio) return;
+
+      if (!isAuthenticated) {
+        clearAuthError();
+        setAuthModalMode("signin");
+        setShowAuthModal(true);
+        setPracticeIsPlaying(false);
+        audio.pause();
+        return;
+      }
+
+      const track = currentPracticeTrack;
+      if (!track) return;
+      if (practiceFadeIntervalRef.current) {
+        clearInterval(practiceFadeIntervalRef.current);
+        practiceFadeIntervalRef.current = null;
+      }
+      const clipStartSeconds = getClipStartSeconds(track);
+      const clampedTime = clamp(nextTimeSeconds, 0, practiceEffectiveDuration);
+      const targetTime = clipStartSeconds + clampedTime;
+
+      try {
+        audio.volume = 1.0;
+        audio.currentTime = targetTime;
+      } catch (err) {
+        console.warn("Failed to scrub practice audio", err);
+      }
+      setPracticeCurrentTime(clampedTime);
+    },
+    [
+      canScrubPractice,
+      clearAuthError,
+      currentPracticeTrack,
+      isAuthenticated,
+      practiceEffectiveDuration,
+    ]
+  );
+
+  const handleRoundScrubInput = useCallback(
+    (event) => {
+      const nextValue = Number(event.target.value);
+      if (!Number.isFinite(nextValue)) return;
+      seekRoundTo(nextValue);
+    },
+    [seekRoundTo]
+  );
+
+  const handlePracticeScrubInput = useCallback(
+    (event) => {
+      const nextValue = Number(event.target.value);
+      if (!Number.isFinite(nextValue)) return;
+      seekPracticeTo(nextValue);
+    },
+    [seekPracticeTo]
+  );
   const isPasoRoundTrack = isLatinRoundMode && isPasoSong(currentSong);
   const roundPasoReferenceTrack = useMemo(
     () => (isLatinRoundMode ? round.find((song) => isPasoSong(song)) ?? null : null),
@@ -3384,18 +3610,27 @@ const roundTransportControls =
                   </h3>
                 ) : null}
                 <div
-                  className="round-progress-wrapper"
-                  style={{ width: "91%", maxWidth: "91%", alignSelf: "center" }}
+                  className="round-progress-wrapper scrub-slider-shell"
+                  style={{
+                    width: "91%",
+                    maxWidth: "91%",
+                    alignSelf: "center",
+                    "--scrub-progress": `${progressBarPercent}%`,
+                  }}
                 >
-                  <progress
-                    value={progressBarValue}
+                  <input
+                    type="range"
+                    min={0}
                     max={progressBarMax}
-                    className="round-progress"
+                    step={0.1}
+                    value={progressBarValue}
+                    className="scrub-slider"
+                    disabled={!canScrubRound}
+                    onChange={handleRoundScrubInput}
+                    onInput={handleRoundScrubInput}
+                    aria-label="Round song progress"
                   />
-                  <div
-                    className="round-progress-thumb"
-                    style={{ left: `${progressBarPercent}%` }}
-                  />
+                  <div className="scrub-slider-thumb" aria-hidden="true" />
                 </div>
                 <div
                   style={{
@@ -3511,18 +3746,27 @@ const roundTransportControls =
                 }}
               >
                 <div
-                  className="round-progress-wrapper"
-                  style={{ width: "91%", maxWidth: "91%", alignSelf: "center" }}
+                  className="round-progress-wrapper scrub-slider-shell"
+                  style={{
+                    width: "91%",
+                    maxWidth: "91%",
+                    alignSelf: "center",
+                    "--scrub-progress": `${practiceProgressPercent}%`,
+                  }}
                 >
-                  <progress
-                    value={practiceEffectiveCurrentTime}
+                  <input
+                    type="range"
+                    min={0}
                     max={practiceEffectiveDuration || 1}
-                    className="round-progress"
+                    step={0.1}
+                    value={practiceEffectiveCurrentTime}
+                    className="scrub-slider"
+                    disabled={!canScrubPractice}
+                    onChange={handlePracticeScrubInput}
+                    onInput={handlePracticeScrubInput}
+                    aria-label="Practice song progress"
                   />
-                  <div
-                    className="round-progress-thumb"
-                    style={{ left: `${practiceProgressPercent}%` }}
-                  />
+                  <div className="scrub-slider-thumb" aria-hidden="true" />
                 </div>
                 <div
                   style={{

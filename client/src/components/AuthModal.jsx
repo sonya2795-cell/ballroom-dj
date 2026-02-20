@@ -186,14 +186,12 @@ export default function AuthModal({
             {formSubtitle ? <p className="auth-modal-subtitle">{formSubtitle}</p> : null}
             {isSignup && signupStep === "sent" ? (
               <div className="auth-form">
-                <div className="auth-email-summary">
-                  <span className="auth-field-label">Email</span>
-                  <span>{formState.email}</span>
-                </div>
                 <p className="auth-step-text">
                   We sent a verification link and code to your inbox. Click the link or paste the
                   code on the verification page to continue.
                 </p>
+                <div className="auth-step-divider" aria-hidden="true" />
+                <p className="auth-step-help">Having touble?</p>
                 {displayError ? <p className="auth-local-error">{displayError}</p> : null}
                 <div className="auth-modal-actions">
                   <a className="neomorphus-button" href="/verify">

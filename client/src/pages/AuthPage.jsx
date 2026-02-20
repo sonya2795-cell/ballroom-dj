@@ -59,11 +59,7 @@ export default function AuthPage({ initialMode }) {
       onRetry={() => clearAuthError()}
       initialMode={initialMode}
       pageTitle={initialMode === "signup" ? "Sign up to start Jiving" : "Welcome back"}
-      pageSubtitle={
-        initialMode === "signup"
-          ? "We’ll email you a verification link to finish setting your password."
-          : "Log in to keep Jiving."
-      }
+      pageSubtitle={initialMode === "signup" ? null : "Log in to keep Jiving."}
       submitLabel={initialMode === "signup" ? "Send verification link" : "Continue"}
       dividerText="or"
       emailLabel="Email"

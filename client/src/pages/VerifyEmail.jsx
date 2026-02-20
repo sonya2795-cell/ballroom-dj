@@ -130,8 +130,7 @@ export default function VerifyEmailPage() {
                 value={token}
                 onChange={(event) => {
                   const sanitized = event.target.value
-                    .toUpperCase()
-                    .replace(/[^A-Z0-9]/g, "")
+                    .replace(/[^0-9]/g, "")
                     .slice(0, 5);
                   setToken(sanitized);
                 }}

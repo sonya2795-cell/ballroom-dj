@@ -136,7 +136,8 @@ textarea {
 .app-shell-footer button,
 .app-shell-footer .neomorphus-button,
 .app-shell-footer .round-progress,
-.app-shell-footer .round-progress-thumb {
+.app-shell-footer .round-progress-thumb,
+.app-shell-footer .scrub-slider {
   pointer-events: auto;
 }
 
@@ -444,7 +445,7 @@ textarea {
   background-color: #30333a;
   color: #ffffff;
   border: none;
-  border-radius: 0.5rem;
+  border-radius: 9999px;
   padding: 0.4rem 0.9rem;
   display: inline-flex;
   align-items: center;
@@ -845,6 +846,21 @@ textarea {
   gap: 0.55rem;
   padding: 0.25rem 0.2rem;
   border-radius: 0.85rem;
+}
+
+.round-queue-item-button {
+  all: unset;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  cursor: pointer;
+}
+
+.round-queue-item-button:focus-visible {
+  outline: 2px solid #4d525d;
+  outline-offset: 2px;
+  border-radius: 0.65rem;
 }
 
 .round-queue-item-art {
@@ -1297,6 +1313,110 @@ textarea {
   box-shadow: inset 3px 3px 5px #1f2126, inset -3px -3px 5px #41454e;
 }
 
+.scrub-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 0.65rem;
+  border-radius: 0.5rem;
+  background: transparent;
+  cursor: pointer;
+  margin: 0;
+  display: block;
+  position: relative;
+  z-index: 1;
+}
+
+.scrub-slider-shell {
+  position: relative;
+  width: 100%;
+  --scrub-thumb-size: 18px;
+  height: var(--scrub-thumb-size);
+  display: flex;
+  align-items: center;
+  overflow: visible;
+}
+
+.scrub-slider-thumb {
+  position: absolute;
+  top: 50%;
+  left: var(--scrub-progress, 0%);
+  width: var(--scrub-thumb-size, 18px);
+  height: var(--scrub-thumb-size, 18px);
+  border-radius: 9999px;
+  background-color: #30333a;
+  border: 1px solid #30333a;
+  box-shadow: 3px 3px 8px rgba(0, 0, 0, 0.5),
+    -3px -3px 8px rgba(255, 255, 255, 0.12);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 5;
+}
+
+.scrub-slider:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.scrub-slider:focus-visible {
+  outline: 2px solid #4d525d;
+  outline-offset: 2px;
+}
+
+.scrub-slider::-webkit-slider-runnable-track {
+  height: 0.65rem;
+  border-radius: 999px;
+  background-color: #2b2e35;
+  background-image: linear-gradient(#25ed27, #25ed27);
+  background-size: max(
+      0px,
+      calc(var(--scrub-progress, 0%) - (var(--scrub-thumb-size) / 2))
+    )
+    100%;
+  background-position: left center;
+  background-repeat: no-repeat;
+  box-shadow: inset 2px 2px 4px rgba(0, 0, 0, 0.45),
+    inset -2px -2px 4px rgba(255, 255, 255, 0.08);
+}
+
+.scrub-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  background-color: transparent;
+  box-shadow: none;
+  opacity: 0;
+  margin-top: calc((0.65rem - 16px) / 2);
+}
+
+.scrub-slider::-moz-range-track {
+  height: 0.65rem;
+  border-radius: 999px;
+  background-color: #2b2e35;
+  background-image: linear-gradient(#25ed27, #25ed27);
+  background-size: max(
+      0px,
+      calc(var(--scrub-progress, 0%) - (var(--scrub-thumb-size) / 2))
+    )
+    100%;
+  background-position: left center;
+  background-repeat: no-repeat;
+  box-shadow: inset 2px 2px 4px rgba(0, 0, 0, 0.45),
+    inset -2px -2px 4px rgba(255, 255, 255, 0.08);
+}
+
+.scrub-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  background-color: transparent;
+  border: none;
+  box-shadow: none;
+  opacity: 0;
+}
+
 .round-progress-thumb {
   position: absolute;
   top: calc(50% + 0.325rem);
@@ -1734,6 +1854,10 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+  font-size: 1.6rem;
+  line-height: 1.4;
+  text-align: center;
+  color: #25ed27;
 }
 
 .auth-step-label {
@@ -1747,6 +1871,20 @@ textarea {
   font-size: 0.95rem;
   font-weight: 600;
   color: #f2f4f7;
+}
+
+.auth-step-help {
+  margin: 0;
+  font-size: 0.75rem;
+  text-align: center;
+  color: #ffffff;
+}
+
+.auth-step-divider {
+  height: 1px;
+  width: 100%;
+  background: #3d414b;
+  margin: 0.75rem 0 0.5rem;
 }
 
 .auth-page .auth-form-row {
@@ -1771,6 +1909,7 @@ textarea {
   gap: 0.35rem;
   font-size: 0.85rem;
   color: #b5bac6;
+  text-align: center;
 }
 
 .auth-email-summary span:last-child {
@@ -2056,11 +2195,11 @@ textarea {
 
 .neomorphus-button.secondary {
   background-color: #2b2e35;
-  box-shadow: inset 3px 3px 5px #1f2126, inset -3px -3px 5px #41454e;
+  box-shadow: 3px 3px 5px #131417, -3px -3px 5px #4d525d;
 }
 
 .neomorphus-button.secondary:hover:not(:disabled) {
-  box-shadow: inset 3px 3px 5px #1f2126, inset -3px -3px 5px #41454e;
+  box-shadow: 3px 3px 5px #131417, -3px -3px 5px #4d525d;
 }
 
 .auth-modal-actions {
@@ -2068,6 +2207,15 @@ textarea {
   gap: 1rem;
   justify-content: center;
   margin-top: 1.5rem;
+}
+
+.auth-modal-actions a.neomorphus-button {
+  text-decoration: none;
+}
+
+.auth-modal-actions .neomorphus-button.secondary {
+  font-size: 0.95rem;
+  color: #ffffff;
 }
 
 .auth-modal-error p {

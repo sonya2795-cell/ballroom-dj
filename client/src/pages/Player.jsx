@@ -205,6 +205,10 @@ function getClipDurationSeconds(song) {
   return null;
 }
 
+function clamp(value, min = 0, max = 1) {
+  return Math.min(Math.max(value, min), max);
+}
+
 function extractFilenameFromUrl(url) {
   if (!url) return null;
   try {
@@ -1123,14 +1127,6 @@ function Player() {
     }
   };
 
-  const formatTime = (timeInSeconds) => {
-    if (!Number.isFinite(timeInSeconds)) return "0:00";
-    const totalSeconds = Math.max(0, Math.floor(timeInSeconds));
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = String(totalSeconds % 60).padStart(2, "0");
-    return `${minutes}:${seconds}`;
-  };
-
   const handleSkip = () => {
     if (breakTimeLeft !== null) {
       const targetIndex =
@@ -1572,6 +1568,101 @@ function Player() {
         : 0,
     ),
   );
+  const canScrubPractice =
+    selectedMode === "practice" &&
+    Boolean(currentPracticeTrack?.file) &&
+    practiceEffectiveDuration > 0;
+
+  const formatTime = (timeInSeconds) => {
+    if (!Number.isFinite(timeInSeconds)) return "0:00";
+    const totalSeconds = Math.max(0, Math.floor(timeInSeconds));
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = String(totalSeconds % 60).padStart(2, "0");
+    return `${minutes}:${seconds}`;
+  };
+
+  const seekRoundTo = useCallback(
+    (nextTimeSeconds) => {
+      if (breakTimeLeft !== null) return;
+      const audio = audioRef.current;
+      if (!audio || currentIndex === null) return;
+      const song = round[currentIndex];
+      if (!song?.file) return;
+      if (!Number.isFinite(effectiveDuration) || effectiveDuration <= 0) return;
+
+      const clipStartSeconds = getClipStartSeconds(song);
+      const clampedTime = clamp(nextTimeSeconds, 0, effectiveDuration);
+      const targetTime = clipStartSeconds + clampedTime;
+
+      try {
+        audio.currentTime = targetTime;
+      } catch (err) {
+        console.warn("Failed to scrub round audio", err);
+      }
+
+      setCurrentTime(clampedTime);
+    },
+    [breakTimeLeft, currentIndex, effectiveDuration, round]
+  );
+
+  const seekPracticeTo = useCallback(
+    (nextTimeSeconds) => {
+      const audio = practiceAudioRef.current;
+      if (!audio) return;
+      if (!practicePlaylist?.tracks?.length) return;
+      const track = practicePlaylist.tracks[practiceTrackIndex];
+      if (!track?.file) return;
+      if (!Number.isFinite(practiceEffectiveDuration) || practiceEffectiveDuration <= 0) return;
+
+      if (!isAuthenticated) {
+        authPromptReasonRef.current = "practice-play";
+        clearAuthPromptTimeout();
+        clearAuthError();
+        setPracticeIsPlaying(false);
+        setShowAuthModal(true);
+        audio.pause();
+        return;
+      }
+
+      const clipStartSeconds = getClipStartSeconds(track);
+      const clampedTime = clamp(nextTimeSeconds, 0, practiceEffectiveDuration);
+      const targetTime = clipStartSeconds + clampedTime;
+
+      try {
+        audio.currentTime = targetTime;
+      } catch (err) {
+        console.warn("Failed to scrub practice audio", err);
+      }
+
+      setPracticeCurrentTime(clampedTime);
+    },
+    [
+      clearAuthError,
+      clearAuthPromptTimeout,
+      isAuthenticated,
+      practiceEffectiveDuration,
+      practicePlaylist,
+      practiceTrackIndex,
+    ]
+  );
+
+  const handleRoundScrubInput = useCallback(
+    (event) => {
+      const nextValue = Number(event.target.value);
+      if (!Number.isFinite(nextValue)) return;
+      seekRoundTo(nextValue);
+    },
+    [seekRoundTo]
+  );
+
+  const handlePracticeScrubInput = useCallback(
+    (event) => {
+      const nextValue = Number(event.target.value);
+      if (!Number.isFinite(nextValue)) return;
+      seekPracticeTo(nextValue);
+    },
+    [seekPracticeTo]
+  );
 
   const roundDisplayItems = useMemo(() => {
     const seen = new Set();
@@ -1749,15 +1840,25 @@ function Player() {
                     {formatTime(practiceEffectiveCurrentTime)}
                   </span>
                 <div className="round-progress-shell playback-progress-shell">
-                  <div className="round-progress-wrapper">
-                    <progress
-                      value={practiceEffectiveCurrentTime}
+                  <div
+                    className="round-progress-wrapper"
+                    style={{
+                      cursor: canScrubPractice ? "pointer" : "default",
+                      touchAction: "none",
+                    }}
+                  >
+                    <input
+                      type="range"
+                      min={0}
                       max={practiceEffectiveDuration || 1}
-                      className="round-progress"
-                    />
-                    <div
-                      className="round-progress-thumb"
-                      style={{ left: `${practiceProgressPercent}%` }}
+                      step={0.1}
+                      value={practiceEffectiveCurrentTime}
+                      className="scrub-slider"
+                      disabled={!canScrubPractice}
+                      onChange={handlePracticeScrubInput}
+                      onInput={handlePracticeScrubInput}
+                      aria-label="Practice song progress"
+                      style={{ "--scrub-progress": `${practiceProgressPercent}%` }}
                     />
                   </div>
                 </div>
@@ -2680,15 +2781,26 @@ function Player() {
               <div className="playback-progress-row">
                 <span className="playback-time playback-time-elapsed">{roundTimeElapsedLabel}</span>
                 <div className="round-progress-shell playback-progress-shell">
-                  <div className="round-progress-wrapper">
-                    <progress
-                      value={roundProgressValue}
+                  <div
+                    className="round-progress-wrapper"
+                    style={{
+                      cursor:
+                        breakTimeLeft !== null || !isRoundActive ? "default" : "pointer",
+                      touchAction: "none",
+                    }}
+                  >
+                    <input
+                      type="range"
+                      min={0}
                       max={roundProgressMax}
-                      className="round-progress"
-                    />
-                    <div
-                      className="round-progress-thumb"
-                      style={{ left: `${roundProgressPercent}%` }}
+                      step={0.1}
+                      value={roundProgressValue}
+                      className="scrub-slider"
+                      disabled={breakTimeLeft !== null || !isRoundActive}
+                      onChange={handleRoundScrubInput}
+                      onInput={handleRoundScrubInput}
+                      aria-label="Round song progress"
+                      style={{ "--scrub-progress": `${roundProgressPercent}%` }}
                     />
                   </div>
                 </div>
