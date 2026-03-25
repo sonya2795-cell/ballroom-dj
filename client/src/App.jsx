@@ -215,6 +215,27 @@ function PreviousIcon({ className = "" }) {
   );
 }
 
+function RepeatIcon({ className = "" }) {
+  return (
+    <svg
+      className={`round-control-icon${className ? ` ${className}` : ""}`}
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M4 12a7 7 0 0 1 7-7h5" />
+      <path d="M16 3.5 19.5 5.5 16 7.5" />
+      <path d="M20 12a7 7 0 0 1-7 7H8" />
+      <path d="M8 20.5 4.5 18.5 8 16.5" />
+    </svg>
+  );
+}
+
 function buildExpandedRound(songs, repeatCount) {
   if (!Array.isArray(songs) || repeatCount <= 0) {
     return [];
@@ -379,6 +400,7 @@ function PlayerApp() {
   const [practiceError, setPracticeError] = useState(null);
   const [practiceDancesLoading, setPracticeDancesLoading] = useState(false);
   const [practiceIsPlaying, setPracticeIsPlaying] = useState(false);
+  const [practiceIsRepeat, setPracticeIsRepeat] = useState(false);
   const [practiceCurrentTime, setPracticeCurrentTime] = useState(0);
   const [practiceDuration, setPracticeDuration] = useState(0);
   const [selectedCrash, setSelectedCrash] = useState(null);
@@ -1006,6 +1028,7 @@ function PlayerApp() {
     setPracticeCurrentTime(0);
     setPracticeDuration(0);
     setPracticeLoadingDance(null);
+    setPracticeIsRepeat(false);
   };
 
   const getRoundDurationLimitSeconds = useCallback(
@@ -2555,6 +2578,33 @@ function PlayerApp() {
       return;
     }
     practiceAdvancingRef.current = true;
+    if (practiceIsRepeat) {
+      const audio = practiceAudioRef.current;
+      if (!audio || !currentPracticeTrack) {
+        practiceAdvancingRef.current = false;
+        return;
+      }
+      if (practiceFadeIntervalRef.current) {
+        clearInterval(practiceFadeIntervalRef.current);
+        practiceFadeIntervalRef.current = null;
+      }
+      const clipStartSeconds = getClipStartSeconds(currentPracticeTrack);
+      audio.currentTime = clipStartSeconds;
+      audio.volume = 1;
+      applyPlaybackRate(audio, practicePlaybackRate);
+      audio
+        .play()
+        .then(() => setPracticeIsPlaying(true))
+        .catch((err) => {
+          console.error("Practice repeat error:", err);
+          setPracticeIsPlaying(false);
+        })
+        .finally(() => {
+          practiceAdvancingRef.current = false;
+        });
+      setPracticeCurrentTime(0);
+      return;
+    }
     if (practiceFadeIntervalRef.current) {
       clearInterval(practiceFadeIntervalRef.current);
       practiceFadeIntervalRef.current = null;
@@ -2595,10 +2645,14 @@ function PlayerApp() {
       setPracticeDuration(0);
     }
   }, [
+    applyPlaybackRate,
+    currentPracticeTrack,
     practicePlaylist,
     practiceTrackIndex,
+    practiceIsRepeat,
     currentPracticeDanceId,
     handlePracticeRequest,
+    practicePlaybackRate,
     practiceAdvancingRef,
     selectedCrash,
   ]);
@@ -3814,6 +3868,18 @@ const roundTransportControls =
                 title={practiceIsPlaying ? "Pause Practice" : "Play Practice"}
               >
                 {practiceStartButtonIcon}
+              </button>
+              <button
+                type="button"
+                className={`neomorphus-button round-control${
+                  practiceIsRepeat ? " active" : ""
+                }`}
+                onClick={() => setPracticeIsRepeat((prev) => !prev)}
+                disabled={!currentPracticeTrack?.file}
+                aria-label={practiceIsRepeat ? "Disable repeat" : "Enable repeat"}
+                title={practiceIsRepeat ? "Repeat On" : "Repeat Off"}
+              >
+                <RepeatIcon />
               </button>
             <button
               type="button"

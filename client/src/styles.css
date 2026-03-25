@@ -7,11 +7,16 @@
 html,
 body {
   height: 100%;
+  background-color: #30333a;
+  overscroll-behavior: none;
 }
 
 body {
   margin: 0;
+  background-color: #30333a;
+  min-height: 100%;
 }
+
 
 body,
 button,
@@ -23,8 +28,18 @@ textarea {
 
 #root {
   min-height: 100vh;
+  height: 100%;
   display: flex;
   flex-direction: column;
+  background-color: #30333a;
+}
+
+@supports (-webkit-touch-callout: none) {
+  html,
+  body,
+  #root {
+    background-color: #30333a;
+  }
 }
 
 .app-root {
@@ -500,6 +515,10 @@ textarea {
   height: 16.8px;
   color: #f6f8fb;
   pointer-events: none;
+}
+
+.neomorphus-button.round-control.active .round-control-icon {
+  color: #25ed27;
 }
 
 .round-control-icon--primary {
