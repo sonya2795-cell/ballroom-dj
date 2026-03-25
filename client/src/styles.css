@@ -526,6 +526,23 @@ textarea {
   height: 21.84px;
 }
 
+.round-builder {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: center;
+}
+
+.round-builder-pill {
+  padding: 0.4rem 0.9rem;
+  border-radius: 9999px;
+  font-size: 0.85rem;
+  letter-spacing: 0.02em;
+  background: #2e3138;
+  color: rgba(255, 255, 255, 0.75);
+}
+
 .neomorphus-button.playback-toggle-button {
   padding: 0;
   width: 48px;

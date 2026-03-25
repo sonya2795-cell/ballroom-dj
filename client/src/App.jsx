@@ -64,6 +64,22 @@ const PASO_CRASH_BUTTON_LABELS = {
   crash2: "2nd crash",
   crash3: "3rd crash",
 };
+const ROUND_DANCE_OPTIONS = {
+  latin: [
+    { id: "chacha", label: "Cha Cha" },
+    { id: "samba", label: "Samba" },
+    { id: "rumba", label: "Rumba" },
+    { id: "paso", label: "Paso Doble" },
+    { id: "jive", label: "Jive" },
+  ],
+  ballroom: [
+    { id: "waltz", label: "Waltz" },
+    { id: "tango", label: "Tango" },
+    { id: "viennesewaltz", label: "Viennese Waltz" },
+    { id: "foxtrot", label: "Foxtrot" },
+    { id: "quickstep", label: "Quickstep" },
+  ],
+};
 const DANCE_SHORT_LABELS = {
   waltz: "W",
   tango: "T",
@@ -141,6 +157,11 @@ function getDanceLabel(label, useShort) {
   if (!useShort || !label) return label;
   const key = label.trim().toLowerCase();
   return DANCE_SHORT_LABELS[key] ?? label;
+}
+
+function getDefaultRoundDanceSelection(styleId) {
+  const options = ROUND_DANCE_OPTIONS[styleId] ?? [];
+  return options.map((option) => option.id);
 }
 
 function PlayIcon({ className = "" }) {
@@ -412,6 +433,9 @@ function PlayerApp() {
     DEFAULT_SPEED_PERCENT,
   );
   const [isAuthMenuOpen, setIsAuthMenuOpen] = useState(false);
+  const [roundDanceSelection, setRoundDanceSelection] = useState(() =>
+    getDefaultRoundDanceSelection(getDefaultStyleId()),
+  );
   const roundRepeatCount = ROUND_HEAT_REPEAT_MAP[roundHeatMode] ?? 1;
   const isPracticeMode = selectedMode === "practice";
   const settingsLabel = isNarrowLayout
@@ -534,6 +558,14 @@ function PlayerApp() {
     setShowWelcomeModal(false);
     setShowModeModal(false);
   }, [isAuthenticated, selectedMode, selectedStyle, user?.uid]);
+
+  useEffect(() => {
+    if (!selectedStyle || previousStyleRef.current === selectedStyle) {
+      return;
+    }
+    previousStyleRef.current = selectedStyle;
+    setRoundDanceSelection(getDefaultRoundDanceSelection(selectedStyle));
+  }, [selectedStyle]);
 
   useEffect(() => {
     if (!selectedStyle && !selectedMode) {
@@ -696,9 +728,65 @@ function PlayerApp() {
     }
     settingsOpenPointerIdRef.current = null;
   };
+  const roundDanceSelectionSet = useMemo(
+    () => new Set(roundDanceSelection),
+    [roundDanceSelection],
+  );
   const filteredRoundSource = useMemo(
-    () => roundSource.filter((track) => isTrackLongEnough(track)),
-    [isTrackLongEnough, roundSource],
+    () =>
+      roundSource.filter((track) => {
+        if (!isTrackLongEnough(track)) return false;
+        const options = ROUND_DANCE_OPTIONS[selectedStyle] ?? null;
+        if (!options || roundDanceSelectionSet.size === 0) return true;
+        const candidates = [
+          track?.danceId,
+          track?.dance,
+          track?.danceKey,
+          track?.danceLabel,
+          track?.folder,
+        ];
+        const normalizedCandidates = candidates
+          .filter(Boolean)
+          .map((key) =>
+            key
+              .toString()
+              .trim()
+              .toLowerCase()
+              .replace(/[^a-z]/g, ""),
+          )
+          .filter(Boolean);
+        const canonicalMap = {
+          chacha: "chacha",
+          cha: "chacha",
+          samba: "samba",
+          rumba: "rumba",
+          rhumba: "rumba",
+          paso: "paso",
+          pasodoble: "paso",
+          pd: "paso",
+          jive: "jive",
+          waltz: "waltz",
+          tango: "tango",
+          viennesewaltz: "viennesewaltz",
+          vienesewaltz: "viennesewaltz",
+          viennese: "viennesewaltz",
+          vienese: "viennesewaltz",
+          vw: "viennesewaltz",
+          foxtrot: "foxtrot",
+          fox: "foxtrot",
+          quickstep: "quickstep",
+          quick: "quickstep",
+          qs: "quickstep",
+        };
+        for (const candidate of normalizedCandidates) {
+          const canonical = canonicalMap[candidate];
+          if (canonical && roundDanceSelectionSet.has(canonical)) {
+            return true;
+          }
+        }
+        return false;
+      }),
+    [isTrackLongEnough, roundSource, roundDanceSelectionSet, selectedStyle],
   );
   const round = useMemo(
     () => buildExpandedRound(filteredRoundSource, roundRepeatCount),
@@ -734,6 +822,8 @@ function PlayerApp() {
     (normalizedPracticeDanceId === PASO_DANCE_ID ||
       normalizedPracticeLoadingDanceId === PASO_DANCE_ID);
   const isLatinRoundMode = selectedMode === "round" && selectedStyle === "latin";
+  const isPasoRoundEnabled =
+    isLatinRoundMode && roundDanceSelection.includes(PASO_DANCE_ID);
   const pasoPracticeMetadata = useMemo(
     () => (isPasoPracticeContext ? currentPracticeTrack ?? null : null),
     [isPasoPracticeContext, currentPracticeTrack],
@@ -743,7 +833,7 @@ function PlayerApp() {
     [pasoPracticeMetadata],
   );
   const hasPasoCrashMetadata = pasoCrashOptions.length > 0;
-  const allowCrashSelection = isPasoPracticeContext || isLatinRoundMode;
+  const allowCrashSelection = isPasoPracticeContext || isPasoRoundEnabled;
   const isPracticeCrashFilterActive =
     selectedMode === "practice" && isPasoPracticeContext && selectedCrash != null;
   const practiceQueueTracks = useMemo(() => {
@@ -798,6 +888,7 @@ function PlayerApp() {
   const roundReplacementRequestsRef = useRef(new Set());
   const roundSongDurationRef = useRef(null);
   const previousModeRef = useRef(null);
+  const previousStyleRef = useRef(null);
 
   // Prevent duplicate advancing
   const advancingRef = useRef(false);
@@ -1423,6 +1514,7 @@ function PlayerApp() {
     stopRoundPlayback();
     clearAuthPromptTimeout();
     setSelectedStyle(styleId);
+    setRoundDanceSelection(getDefaultRoundDanceSelection(styleId));
 
     if (!ENABLED_STYLE_IDS.has(styleId)) {
       return;
@@ -3308,10 +3400,10 @@ function PlayerApp() {
     },
     [seekPracticeTo]
   );
-  const isPasoRoundTrack = isLatinRoundMode && isPasoSong(currentSong);
+  const isPasoRoundTrack = isPasoRoundEnabled && isPasoSong(currentSong);
   const roundPasoReferenceTrack = useMemo(
-    () => (isLatinRoundMode ? round.find((song) => isPasoSong(song)) ?? null : null),
-    [isLatinRoundMode, round],
+    () => (isPasoRoundEnabled ? round.find((song) => isPasoSong(song)) ?? null : null),
+    [isPasoRoundEnabled, round],
   );
   const roundPasoCrashOptions = useMemo(
     () => (roundPasoReferenceTrack ? getCrashOptions(roundPasoReferenceTrack) : []),
@@ -3414,9 +3506,9 @@ function PlayerApp() {
     songDurationSeconds,
     userSelectedCrashRef,
   ]);
+  const hasRoundProgress = currentIndex !== null || breakTimeLeft !== null;
   let currentHeatLabel = null;
   if (roundRepeatCount > 1) {
-    const hasRoundProgress = currentIndex !== null || breakTimeLeft !== null;
     if (!hasRoundProgress) {
       currentHeatLabel = `${roundRepeatCount} Heats`;
     } else {
@@ -3442,6 +3534,9 @@ function PlayerApp() {
     }
   }
   const heatSuffix = currentHeatLabel ? ` • ${currentHeatLabel}` : "";
+  const showRoundBuilder =
+    selectedMode === "round" && !hasRoundProgress && ROUND_DANCE_OPTIONS[selectedStyle];
+  const roundBuilderOptions = ROUND_DANCE_OPTIONS[selectedStyle] ?? [];
 
   const durationControls =
     selectedStyle !== null ? (
@@ -3454,6 +3549,33 @@ function PlayerApp() {
           width: "100%",
         }}
       >
+        {showRoundBuilder ? (
+          <div className="round-builder">
+            {roundBuilderOptions.map((option) => {
+              const isActive = roundDanceSelection.includes(option.id);
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  className={`neomorphus-button round-builder-pill${
+                    isActive ? " active" : ""
+                  }`}
+                  onClick={() => {
+                    setRoundDanceSelection((prev) => {
+                      if (prev.includes(option.id)) {
+                        const next = prev.filter((id) => id !== option.id);
+                        return next.length > 0 ? next : prev;
+                      }
+                      return [...prev, option.id];
+                    });
+                  }}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
         <div
           style={
             isPasoPracticeContext
@@ -3532,7 +3654,7 @@ function PlayerApp() {
             />
           </div>
         )}
-        {isLatinRoundMode ? (
+        {isPasoRoundEnabled ? (
           <div className="round-paso-crash-buttons" style={{ width: "100%" }}>
             <span className="round-paso-crash-heading">Paso Doble Crash</span>
             <div className="round-paso-crash-button-group">
